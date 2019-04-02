@@ -1,0 +1,57 @@
+{
+	"name": "@zxteam/sql.sqlite",
+	"version": "0.0.1",
+	"description": "ZXTeam's SQL implementation for SQLite",
+	"main": "./src/index.js",
+	"types": "./src/index.d.ts",
+	"author": {
+		"name": "Maxim Anurin",
+		"email": "maxim.anurin@zxteam.org",
+		"url": "http://www.anurin.name"
+	},
+	"contributors": [
+		{
+			"name": "Serhii Zghama",
+			"email": "serhii.zghama@zxteam.org"
+		}
+	],
+	"license": "MIT",
+	"devDependencies": {
+		"@types/chai-datetime": "0.0.31",
+		"@zxnode/build": "0.0.32",
+		"@zxteam/ensure.js": "^1.0.0",
+		"chai-datetime": "^1.5.0"
+	},
+	"dependencies": {
+		"@types/sqlite3": "^3.1.5",
+		"@zxteam/contract": "^3.2.1",
+		"@zxteam/contract.sql": "^3.0.2",
+		"@zxteam/disposable": "^3.0.2",
+		"@zxteam/financial.js": "^3.0.3",
+		"ptask.js": "^3.0.2",
+		"sqlite3": "^4.0.6"
+	},
+	"keywords": [
+		"zx",
+		"zxteam",
+		"library",
+		"reusable",
+		"sql",
+		"sqlite"
+	],
+	"repository": {
+		"type": "git",
+		"url": "ssh://git@dev.zxteam.net:22282/pub/node/sql.sqlite.git"
+	},
+	"bugs": {
+		"url": "https://dev.zxteam.net/pub/node/sql.sqlite/issues"
+	},
+	"homepage": "https://dev.zxteam.net/pub/node/sql.sqlite#readme",
+	"scripts": {
+		"build": "zxbuild clean dist",
+		"test:local": "env TEST_DB_URL=\"sqlite://\" mocha --require source-map-support/register --recursive \"test/**/*.test.js\"",
+		"test": "mocha --require source-map-support/register --recursive \"test/**/*.test.js\"",
+		"prepare:initdb": "node scripts/init-test-db.js"
+	},
+	"private": true
+}

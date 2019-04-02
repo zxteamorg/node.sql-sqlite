@@ -1,0 +1,36 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Test",
+			"type": "node",
+			"request": "launch",
+			"preLaunchTask": "compile:test:ts",
+			"runtimeExecutable": null,
+			"runtimeArgs": [
+				"--debug-brk",
+				"--nolazy",
+				"--require",
+				"source-map-support/register"
+			],
+			"stopOnEntry": false,
+			"program": "${workspaceRoot}/node_modules/mocha/bin/_mocha",
+			"args": [
+				"--no-timeouts",
+				"--colors",
+				"test/**/*.js"
+			],
+			"cwd": "${workspaceRoot}",
+			"env": {
+				"NODE_ENV": "development",
+				"TEST_DB_URL": "sqlite://"
+			},
+			"console": "internalConsole",
+			"sourceMaps": true,
+			"outFiles": [
+				"${workspaceRoot}/src/**/*.js",
+				"${workspaceRoot}/test/**/*.js"
+			]
+		}
+	]
+}
