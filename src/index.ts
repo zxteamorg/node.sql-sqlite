@@ -7,6 +7,7 @@ import { Disposable, Initable } from "@zxteam/disposable";
 import { financial } from "@zxteam/financial.js";
 import { Task, CancelledError } from "ptask.js";
 import * as sqlite from "sqlite3";
+const fs = require("fs");
 
 const FINACIAL_NUMBER_DEFAULT_FRACTION = 12;
 
@@ -43,7 +44,6 @@ function sqliteAllScript(instansDb: sqlite.Database, sql: string, params?: Array
 
 enum SqliteOrNull { sqlite, null }
 
-
 export class SQLiteProviderFactory implements Factory<SqlProvider> {
 	private readonly _logger: Logger;
 	private readonly _fullPathDb: string;
@@ -78,6 +78,10 @@ export class SQLiteProviderFactory implements Factory<SqlProvider> {
 
 			if (ct.isCancellationRequested) { return reject(new CancelledError()); }
 
+
+			if (!fs.existsSync(this._fullPathDb)) {
+				throw new Error(`Don't exist file database ${this._fullPathDb}`);
+			}
 			if (this._sqliteConnection === null) {
 				const sqlite3 = sqlite.verbose();
 				this._sqliteConnection = new sqlite3.Database(this._fullPathDb, (error) => {
