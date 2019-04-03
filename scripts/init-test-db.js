@@ -92,9 +92,10 @@ function sqliteRunScript(instansDb, sql) {
 	const hrstart = process.hrtime();
 	return new Promise((resolve, reject) => {
 		try {
+			console.log(sql);
 			instansDb.run(sql, function (error) {
 				const hrend = process.hrtime(hrstart);
-				//console.log("SQL Execution time (hr): %ds", hrend[0] + hrend[1] / 1000000000);
+				console.log("SQL Execution time (hr): %ds", hrend[0] + hrend[1] / 1000000000);
 
 				if (error) {
 					reject(error);

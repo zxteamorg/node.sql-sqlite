@@ -42,28 +42,8 @@ const DUMMY_CANCELLATION_TOKEN: CancellationToken = {
 };
 
 function getSQLiteUrl(): string {
-	function parseDbServerUrl(url: string): URL {
-		try {
-			return new URL(url);
-		} catch (e) {
-			throw new Error(`Wrong TEST_DB_URL = ${url}. ${e.message}.`);
-		}
-	}
-
-	if ("TEST_DB_URL" in process.env) {
-		const urlStr = ensureTestDbUrl.string(process.env.TEST_DB_URL as string);
-		const url = parseDbServerUrl(urlStr);
-		switch (url.protocol) {
-			case "sqlite:": {
-				const fullPathDb = __dirname + "\\sqlite.db";
-				return fullPathDb;
-			}
-			default:
-				throw new Error(`Not supported DB Server protocol = ${process.env.TEST_DB_URL}`);
-		}
-	} else {
-		throw new Error("TEST_DB_URL environment is not defined. Please set the variable to use these tests.");
-	}
+	const fullPathDb = __dirname + "\\sqlite.db";
+	return fullPathDb;
 }
 
 
