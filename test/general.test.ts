@@ -311,13 +311,13 @@ describe("SQLite Tests", function () {
 		const tempTable = await getSqlProvider().createTempTable(
 			DUMMY_CANCELLATION_TOKEN,
 			"tb_1", // Should override(hide) existing table
-			"`id` SMALLINT NOT NULL AUTO_INCREMENT, `title` VARCHAR(32) NOT NULL, `value` SMALLINT NOT NULL, PRIMARY KEY (`id`)"
+			"id INTEGER PRIMARY KEY AUTOINCREMENT, title VARCHAR(32) NOT NULL, value SMALLINT NOT NULL"
 		);
 		try {
-			await getSqlProvider().statement("INSERT INTO tb_1(`title`, `value`) VALUES('test title 1', ?)").execute(DUMMY_CANCELLATION_TOKEN, 1);
-			await getSqlProvider().statement("INSERT INTO tb_1(`title`, `value`) VALUES('test title 2', ?)").execute(DUMMY_CANCELLATION_TOKEN, 2);
+			await getSqlProvider().statement("INSERT INTO tb_1(title, value) VALUES('test title 1', ?)").execute(DUMMY_CANCELLATION_TOKEN, 1);
+			await getSqlProvider().statement("INSERT INTO tb_1(title, value) VALUES('test title 2', ?)").execute(DUMMY_CANCELLATION_TOKEN, 2);
 
-			const resultArray = await getSqlProvider().statement("SELECT `title`, `value` FROM `tb_1`").executeQuery(DUMMY_CANCELLATION_TOKEN);
+			const resultArray = await getSqlProvider().statement("SELECT title, value FROM tb_1").executeQuery(DUMMY_CANCELLATION_TOKEN);
 
 			assert.instanceOf(resultArray, Array);
 			assert.equal(resultArray.length, 2);
@@ -330,12 +330,12 @@ describe("SQLite Tests", function () {
 		}
 
 		// tslint:disable-next-line:max-line-length
-		const resultArrayAfterDestoroyTempTable = await getSqlProvider().statement("SELECT * FROM `tb_1`").executeQuery(DUMMY_CANCELLATION_TOKEN);
+		const resultArrayAfterDestoroyTempTable = await getSqlProvider().statement("SELECT * FROM tb_1").executeQuery(DUMMY_CANCELLATION_TOKEN);
 
 		assert.instanceOf(resultArrayAfterDestoroyTempTable, Array);
 		assert.equal(resultArrayAfterDestoroyTempTable.length, 3);
-		assert.equal(resultArrayAfterDestoroyTempTable[0].get("int").asNumber, 1);
-		assert.equal(resultArrayAfterDestoroyTempTable[0].get("varchar").asString, "one");
+		assert.equal(resultArrayAfterDestoroyTempTable[0].get("intValue").asNumber, 1);
+		assert.equal(resultArrayAfterDestoroyTempTable[0].get("varcharValue").asString, "one");
 	});
 
 	it.skip("Read two Result Sets via sp_multi_fetch", async function () {

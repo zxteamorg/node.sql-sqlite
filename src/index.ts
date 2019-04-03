@@ -150,62 +150,6 @@ class SQLiteProvider extends Disposable implements SqlProvider {
 	}
 }
 
-// interface NormalizedMysqlBulkResult {
-// 	sets: Array<[Array<any>, Array<mysql.FieldInfo>]>;
-// 	status?: any;
-// }
-// function normalizeMysqlBulkResult(cb: (err: any, underlyingResult?: NormalizedMysqlBulkResult) => void):
-// 	(err: any, results: any, fields: any) => void {
-// 	/** The main reason of the function is normalize mysql query result
-// 	 * For example:
-// 	 *    SELECT query returns array of RowDataPacket-s
-// 	 *    but CALL a stored procedure with same SELECT returns different result
-// 	 *    that include OkPacket
-// 	 * See:
-// 	 *     https://github.com/mysqljs/mysql/issues/654
-// 	 *     https://github.com/tgriesser/knex/issues/1975
-// 	 */
-// 	return function (err: any, results: any, fields: any): void {
-// 		if (err) { return cb(err, undefined); }
-// 		if (results) {
-// 			if (fields && results instanceof Array && fields instanceof Array) {
-// 				const resultsLength = results.length;
-// 				if (resultsLength === 0) {
-// 					const normalizedResult: NormalizedMysqlBulkResult = { sets: [] };
-// 					return cb(null, normalizedResult);
-// 				} else if (resultsLength > 0) {
-// 					if (results[0] instanceof Array && fields.length === resultsLength) {
-// 						const normalizedResult: NormalizedMysqlBulkResult = { sets: [] };
-// 						for (let resultIndex = 0; resultIndex < resultsLength; ++resultIndex) {
-// 							const result = results[resultIndex];
-// 							if (result) {
-// 								if (result instanceof Array) {
-// 									normalizedResult.sets.push([result, fields[resultIndex]]);
-// 								} else if (result.constructor.name === "OkPacket") {
-// 									normalizedResult.status = result;
-// 								}
-// 							}
-// 						}
-// 						return cb(null, normalizedResult);
-// 					} else if (results[0].constructor.name === "RowDataPacket") {
-// 						const normalizedResult: NormalizedMysqlBulkResult = { sets: [] };
-// 						normalizedResult.sets.push([results, fields]);
-// 						return cb(null, normalizedResult);
-// 					}
-// 				}
-// 			}
-// 			if (results.constructor.name === "OkPacket") {
-// 				/* Use case: CALL sp_empty_fetch() - execute SP without any output */
-// 				return cb(null, {
-// 					sets: [],
-// 					status: results
-// 				});
-// 			}
-// 		}
-// 		return cb(new Error("Underlying MySql provider returns ununderstandable result"), undefined);
-// 	};
-// }
-
 class SQLiteStatement implements SqlStatement {
 	private readonly _log: Logger;
 	private readonly _sqlText: string;
@@ -221,7 +165,22 @@ class SQLiteStatement implements SqlStatement {
 	public execute(cancellationToken: CancellationToken, ...values: Array<SqlStatementParam>): Task<void> {
 		return Task.run((ct: CancellationToken) => {
 			return new Promise<void>((resolve, reject) => {
-				throw new Error("Don't support yet!");
+				if (this._log.isTraceEnabled) {
+					this._log.trace("Executing Query:", this._sqlText, values);
+				}
+				sqliteRunScript(this._owner.sqliteConnection, this._sqlText, values).then((underlyingResult) => {
+					if (this._log.isTraceEnabled) {
+						this._log.trace("Executed Scalar:", underlyingResult);
+					}
+					return resolve();
+				}).catch((err) => {
+					if (err) {
+						if (this._log.isTraceEnabled) {
+							this._log.trace("Executed Scalar with error:", err);
+						}
+						return reject(err);
+					}
+				});
 			});
 		}, cancellationToken);
 	}
@@ -237,7 +196,13 @@ class SQLiteStatement implements SqlStatement {
 						this._log.trace("Executed Scalar:", underlyingResult);
 					}
 					if (underlyingResult.length > 0) {
-						return resolve(underlyingResult.map(row => new SQLiteSqlResultRecord(row)));
+						const resArray: Array<SqlResultRecord> = [];
+						underlyingResult.forEach((row) => {
+							const rowz = new SQLiteSqlResultRecord(row);
+							resArray.push(rowz);
+						});
+						return resolve(resArray);
+						// return resolve(underlyingResult.map(row => new SQLiteSqlResultRecord(row)));
 					} else {
 						return resolve([]);
 					}
@@ -291,7 +256,6 @@ class SQLiteStatement implements SqlStatement {
 		}, cancellationToken);
 	}
 }
-
 
 namespace SQLiteSqlResultRecord {
 	export type NameMap = {
@@ -361,13 +325,13 @@ class SQLiteTempTable extends Initable implements SqlTemporaryTable {
 	}
 
 	public bulkInsert(cancellationToken: CancellationToken, bulkValues: Array<Array<SqlStatementParam>>): TaskLike<void> {
-		return this._owner.statement(`INSERT INTO \`${this._tableName}\``).execute(cancellationToken, bulkValues as any);
+		return this._owner.statement(`INSERT INTO temp.${this._tableName}`).execute(cancellationToken, bulkValues as any);
 	}
 	public crear(cancellationToken: CancellationToken): TaskLike<void> {
-		return this._owner.statement(`DELETE FROM \`${this._tableName}\``).execute(cancellationToken);
+		return this._owner.statement(`DELETE FROM temp.${this._tableName}`).execute(cancellationToken);
 	}
 	public insert(cancellationToken: CancellationToken, values: Array<SqlStatementParam>): Task<void> {
-		return this._owner.statement(`INSERT INTO \`${this._tableName}\``).execute(cancellationToken, ...values);
+		return this._owner.statement(`INSERT INTO temp.${this._tableName}`).execute(cancellationToken, ...values);
 	}
 
 	protected async onInit(): Promise<void> {
@@ -375,7 +339,7 @@ class SQLiteTempTable extends Initable implements SqlTemporaryTable {
 	}
 	protected async onDispose(): Promise<void> {
 		try {
-			await this._owner.statement(`DROP TEMPORARY TABLE ${this._tableName}`).execute(this._cancellationToken);
+			await this._owner.statement(`DROP TABLE temp.${this._tableName}`).execute(this._cancellationToken);
 		} catch (e) {
 			// dispose never raise error
 			if (e instanceof Error && e.name === "CancelledError") {
