@@ -51,7 +51,7 @@ async function run() {
 			if (folderEnv === undefined || folderEnv === env) {
 				console.log("Processing:", pathSql);
 				const sqlScripts = await fs.readFileSync(pathSql, "utf8");
-				const lines = sqlScripts.split("\r");
+				const lines = sqlScripts.split("\n");
 				//console.log("lines", lines);
 				let allCommands = [];
 				let command = "";
