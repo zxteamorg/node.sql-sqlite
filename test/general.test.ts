@@ -4,6 +4,7 @@ import ensureFactory from "@zxteam/ensure.js";
 import { SqlProvider } from "@zxteam/contract.sql";
 
 import * as lib from "../src";
+const path = require("path");
 
 declare global {
 	namespace Chai {
@@ -42,7 +43,7 @@ const DUMMY_CANCELLATION_TOKEN: CancellationToken = {
 };
 
 function getSQLiteUrl(): string {
-	const fullPathDb = __dirname + "\\sqlite.db";
+	const fullPathDb = path.join(__dirname, "sqlite.db");
 	return fullPathDb;
 }
 
