@@ -42,19 +42,15 @@ function sqliteAllScript(instansDb: sqlite.Database, sql: string, params?: Array
 	});
 }
 
-enum SqliteOrNull { sqlite, null }
-
 export class SQLiteProviderFactory implements Factory<SqlProvider> {
 	private readonly _logger: Logger;
 	private readonly _fullPathDb: string;
 
-	private _providesCount: number;
 	private _sqliteConnection: sqlite.Database | null;
 
 	// This implemenation wrap package https://www.npmjs.com/package/sqlite3
 	public constructor(opts: { fullPathDb: string, logger?: Logger }) {
 		this._sqliteConnection = null;
-		this._providesCount = 0;
 		this._logger = opts.logger || new DummyLogger();
 		this._fullPathDb = opts.fullPathDb;
 
@@ -65,10 +61,10 @@ export class SQLiteProviderFactory implements Factory<SqlProvider> {
 		const disposer = (connection: sqlite.Database): Promise<void> => {
 			connection.close((error) => {
 				if (error) {
-					Promise.reject(error);
-					return;
+					return Promise.reject(error);
 				}
-				Promise.resolve();
+				this._sqliteConnection = null;
+				return Promise.resolve();
 			});
 			return Promise.resolve();
 		};
@@ -94,9 +90,9 @@ export class SQLiteProviderFactory implements Factory<SqlProvider> {
 			if (ct.isCancellationRequested) { return reject(new CancelledError()); }
 			try {
 				this._logger.trace("Created SQLite SqlProvider");
-				// const dbSqlite = this._sqliteConnection;
 				if (this._sqliteConnection === null) { throw new Error("Don't have database Sqlite"); }
-				const sqlProvider: SqlProvider = new SQLiteProvider(this._sqliteConnection, this._logger);
+				const sqlProvider: SqlProvider = new SQLiteProvider(this._sqliteConnection,
+					() => disposer(this._sqliteConnection as any), this._logger);
 				this._logger.trace("Created SQLite SqlProvider");
 				return resolve(sqlProvider);
 			} catch (e) {
@@ -123,10 +119,10 @@ class SQLiteProvider extends Disposable implements SqlProvider {
 	public readonly sqliteConnection: sqlite.Database;
 	private readonly _log: Logger;
 	private readonly _disposer: () => Promise<void>;
-	public constructor(sqliteConnection: sqlite.Database, log: Logger) {
+	public constructor(sqliteConnection: sqlite.Database, disposer: () => Promise<void>, log: Logger) {
 		super();
 		this.sqliteConnection = sqliteConnection;
-		// this._disposer = disposer;
+		this._disposer = disposer;
 		this._log = log;
 		this._log.trace("SQLiteProvider Constructed");
 	}
@@ -149,7 +145,7 @@ class SQLiteProvider extends Disposable implements SqlProvider {
 
 	protected async onDispose(): Promise<void> {
 		this._log.trace("Disposing");
-		// await this._disposer();
+		await this._disposer();
 		this._log.trace("Disposed");
 	}
 }
@@ -206,7 +202,6 @@ class SQLiteStatement implements SqlStatement {
 							resArray.push(rowz);
 						});
 						return resolve(resArray);
-						// return resolve(underlyingResult.map(row => new SQLiteSqlResultRecord(row)));
 					} else {
 						return resolve([]);
 					}
