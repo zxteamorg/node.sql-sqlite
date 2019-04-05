@@ -1,6 +1,6 @@
 {
 	"name": "@zxteam/sql.sqlite",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"description": "ZXTeam's SQL implementation for SQLite",
 	"main": "./src/index.js",
 	"types": "./src/index.d.ts",
@@ -17,25 +17,22 @@
 	],
 	"license": "MIT",
 	"devDependencies": {
-		"@types/chai-datetime": "0.0.31",
-		"@zxnode/build": "0.0.32",
-		"@zxteam/ensure.js": "^1.0.0",
+		"@types/chai-datetime": "^0.0.31",
+		"@types/sqlite3": "^3.1.5",
+		"@zxnode/build": "^0.0.33",
+		"@zxteam/ensure.js": "^1.2.0",
 		"chai-datetime": "^1.5.0"
 	},
 	"dependencies": {
-		"@types/sqlite3": "^3.1.5",
-		"@zxteam/contract": "^3.2.1",
-		"@zxteam/contract.sql": "^3.0.2",
-		"@zxteam/disposable": "^3.0.2",
-		"@zxteam/financial.js": "^3.0.3",
-		"ptask.js": "^3.0.2",
+		"@zxteam/contract": "^3.2.4",
+		"@zxteam/contract.sql": "^3.2.4",
+		"@zxteam/disposable": "^3.2.2",
+		"@zxteam/financial.js": "^3.2.1",
+		"ptask.js": "^3.2.1",
 		"sqlite3": "^4.0.6"
 	},
 	"keywords": [
-		"zx",
 		"zxteam",
-		"library",
-		"reusable",
 		"sql",
 		"sqlite"
 	],
@@ -51,7 +48,7 @@
 		"build": "zxbuild clean dist",
 		"test:local": "env TEST_DB_URL=\"sqlite://\" mocha --require source-map-support/register --recursive \"test/**/*.test.js\"",
 		"test": "mocha --require source-map-support/register --recursive \"test/**/*.test.js\"",
-		"prepare:initdb": "node scripts/init-test-db.js"
+		"prepare:devdb": "node scripts/init-test-db.js"
 	},
 	"private": true
 }

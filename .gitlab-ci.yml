@@ -12,11 +12,22 @@ test:
     - build
   variables:
     GIT_STRATEGY: none
-  services:
-    - name: registry.dev.zxteam.net/pub/docker/test/mysql8:1
-      alias: mysql
   before_script:
-    - echo "Wake up Sqlite"
-    - npm run prepare:initdb
+    - npm run prepare:devdb
   script:
+    - npm run test
+    - npm run test
+    - npm run test
+    - npm run test
+    - npm run test
+    - npm run test
+    - npm run test
+    - npm run test
+    - npm run test
+    - npm run test
+    - npm run test
+    - npm run test
+    - npm run test
+    - npm run test
+    - npm run test
     - npm run test

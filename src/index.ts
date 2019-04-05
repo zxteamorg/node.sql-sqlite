@@ -1,13 +1,16 @@
 
 import { Factory, Logger, CancellationToken, Task as TaskLike, Financial as FinancialLike } from "@zxteam/contract";
-import {
-	SqlProvider, SqlStatement, SqlStatementParam, SqlResultRecord, SqlData, SqlTemporaryTable
-} from "@zxteam/contract.sql";
 import { Disposable, Initable } from "@zxteam/disposable";
 import { financial } from "@zxteam/financial.js";
 import { Task, CancelledError } from "ptask.js";
 import * as sqlite from "sqlite3";
-const fs = require("fs");
+import * as fs from "fs";
+import { promisify } from "util";
+import { URL, fileURLToPath } from "url";
+
+import * as contract from "@zxteam/contract.sql";
+
+const existsAsync = promisify(fs.exists);
 
 const FINACIAL_NUMBER_DEFAULT_FRACTION = 12;
 
@@ -42,7 +45,7 @@ function sqliteAllScript(instansDb: sqlite.Database, sql: string, params?: Array
 	});
 }
 
-export class SQLiteProviderFactory implements Factory<SqlProvider> {
+export class SQLiteProviderFactory implements contract.EmbeddedSqlProviderFactory {
 	private readonly _logger: Logger;
 	private readonly _fullPathDb: string;
 
@@ -57,7 +60,7 @@ export class SQLiteProviderFactory implements Factory<SqlProvider> {
 		this._logger.trace("SQLiteProviderFactory Constructed");
 	}
 
-	public create(cancellationToken?: CancellationToken): Task<SqlProvider> {
+	public create(cancellationToken?: CancellationToken): Task<contract.SqlProvider> {
 		const disposer = (connection: sqlite.Database): Promise<void> => {
 			connection.close((error) => {
 				if (error) {
@@ -69,7 +72,7 @@ export class SQLiteProviderFactory implements Factory<SqlProvider> {
 			return Promise.resolve();
 		};
 
-		return Task.run((ct) => new Promise<SqlProvider>((resolve, reject) => {
+		return Task.run((ct) => new Promise<contract.SqlProvider>((resolve, reject) => {
 			this._logger.trace("Creating SQLite SqlProvider..");
 
 			if (ct.isCancellationRequested) { return reject(new CancelledError()); }
@@ -91,22 +94,77 @@ export class SQLiteProviderFactory implements Factory<SqlProvider> {
 			try {
 				this._logger.trace("Created SQLite SqlProvider");
 				if (this._sqliteConnection === null) { throw new Error("Don't have database Sqlite"); }
-				const sqlProvider: SqlProvider = new SQLiteProvider(this._sqliteConnection,
+				const sqlProvider: contract.SqlProvider = new SQLiteProvider(this._sqliteConnection,
 					() => disposer(this._sqliteConnection as any), this._logger);
 				this._logger.trace("Created SQLite SqlProvider");
 				return resolve(sqlProvider);
 			} catch (e) {
 				this._sqliteConnection.close((error) => {
 					if (error) {
+						// WHAT IS THIS????
 						Promise.reject(error);
 						return;
 					}
+					// WHAT IS THIS????
 					Promise.resolve();
 				});
 				this._logger.trace("Failed to create SQLite SqlProvider", e);
 				return reject(e);
 			}
 		}), cancellationToken);
+	}
+
+	public newDatabase(cancellationToken: CancellationToken, locationUrl: URL, initScriptUrl?: URL): Task<void> {
+		return Task.run(async () => {
+			this._logger.trace("Inside newDatabase()");
+
+			if (initScriptUrl !== undefined) {
+				this._logger.trace("User passed initScriptUrl argument, but code is not supported this argument right now. Raise an exception.");
+				throw new Error("Not implemented yet");
+			}
+
+			this._logger.trace("Convert URL location to path notation");
+			const filename = fileURLToPath(locationUrl);
+
+			if (this._logger.isTraceEnabled) {
+				this._logger.trace(`Check is file ${filename} exists`);
+			}
+
+			{ // scope
+				const isExist = await existsAsync(filename);
+				if (isExist) {
+					if (this._logger.isTraceEnabled) {
+						this._logger.trace(`The file ${filename} exists. Raise an exception about this problem`);
+					}
+					throw new Error(`Cannot create new database due the file ${locationUrl} already exists`);
+				}
+			}
+
+			this._logger.trace("Check cancellationToken for interrupt");
+			cancellationToken.throwIfCancellationRequested();
+
+			this._logger.trace("Open SQLite database for non-exsting file");
+			const db = await helpers.openDatabase(filename);
+
+			this._logger.trace("Checking cancellationToken between Open and Close may provide memory leaks. So we do not check it at all");
+
+			this._logger.trace("Close SQLite database");
+			await helpers.closeDatabase(db);
+
+			this._logger.trace("Check cancellationToken for interrupt");
+			cancellationToken.throwIfCancellationRequested();
+
+			this._logger.trace("Double check that DB file was created");
+			{ // scope
+				const isExist = await existsAsync(filename);
+				if (!isExist) {
+					if (this._logger.isTraceEnabled) {
+						this._logger.trace(`Something went wrong. The DB file ${locationUrl} still not exists after Open/Close SQLite.`);
+					}
+					throw new Error("Underlaying library SQLite did not create DB file.");
+				}
+			}
+		});
 	}
 }
 
@@ -115,7 +173,7 @@ export default SQLiteProviderFactory;
 class ArgumentError extends Error { }
 class InvalidOperationError extends Error { }
 
-class SQLiteProvider extends Disposable implements SqlProvider {
+class SQLiteProvider extends Disposable implements contract.SqlProvider {
 	public readonly sqliteConnection: sqlite.Database;
 	private readonly _log: Logger;
 	private readonly _disposer: () => Promise<void>;
@@ -135,7 +193,7 @@ class SQLiteProvider extends Disposable implements SqlProvider {
 	}
 
 	// tslint:disable-next-line:max-line-length
-	public createTempTable(cancellationToken: CancellationToken, tableName: string, columnsDefinitions: string): TaskLike<SqlTemporaryTable> {
+	public createTempTable(cancellationToken: CancellationToken, tableName: string, columnsDefinitions: string): TaskLike<contract.SqlTemporaryTable> {
 		return Task.run(async (ct) => {
 			const tempTable = new SQLiteTempTable(this, ct, tableName, columnsDefinitions);
 			await tempTable.init();
@@ -150,7 +208,7 @@ class SQLiteProvider extends Disposable implements SqlProvider {
 	}
 }
 
-class SQLiteStatement implements SqlStatement {
+class SQLiteStatement implements contract.SqlStatement {
 	private readonly _log: Logger;
 	private readonly _sqlText: string;
 	private readonly _owner: SQLiteProvider;
@@ -162,7 +220,7 @@ class SQLiteStatement implements SqlStatement {
 		this._log.trace("SQLiteStatement constructed");
 	}
 
-	public execute(cancellationToken: CancellationToken, ...values: Array<SqlStatementParam>): Task<void> {
+	public execute(cancellationToken: CancellationToken, ...values: Array<contract.SqlStatementParam>): Task<void> {
 		return Task.run((ct: CancellationToken) => {
 			return new Promise<void>((resolve, reject) => {
 				if (this._log.isTraceEnabled) {
@@ -185,9 +243,12 @@ class SQLiteStatement implements SqlStatement {
 		}, cancellationToken);
 	}
 
-	public executeQuery(cancellationToken: CancellationToken, ...values: Array<SqlStatementParam>): Task<Array<SqlResultRecord>> {
+	public executeQuery(
+		cancellationToken: CancellationToken,
+		...values: Array<contract.SqlStatementParam>
+	): Task<Array<contract.SqlResultRecord>> {
 		return Task.run((ct: CancellationToken) => {
-			return new Promise<Array<SqlResultRecord>>((resolve, reject) => {
+			return new Promise<Array<contract.SqlResultRecord>>((resolve, reject) => {
 				if (this._log.isTraceEnabled) {
 					this._log.trace("Executing Query:", this._sqlText, values);
 				}
@@ -196,7 +257,7 @@ class SQLiteStatement implements SqlStatement {
 						this._log.trace("Executed Scalar:", underlyingResult);
 					}
 					if (underlyingResult.length > 0) {
-						const resArray: Array<SqlResultRecord> = [];
+						const resArray: Array<contract.SqlResultRecord> = [];
 						underlyingResult.forEach((row) => {
 							const rowz = new SQLiteSqlResultRecord(row);
 							resArray.push(rowz);
@@ -207,9 +268,7 @@ class SQLiteStatement implements SqlStatement {
 					}
 				}).catch((err) => {
 					if (err) {
-						if (this._log.isTraceEnabled) {
-							this._log.trace("Executed Scalar with error:", err);
-						}
+						this._log.trace("Executed Scalar with error:", err);
 						return reject(err);
 					}
 				});
@@ -218,24 +277,18 @@ class SQLiteStatement implements SqlStatement {
 	}
 
 	// tslint:disable-next-line: max-line-length
-	public executeQueryMultiSets(cancellationToken: CancellationToken, ...values: Array<SqlStatementParam>): Task<Array<Array<SqlResultRecord>>> {
+	public executeQueryMultiSets(cancellationToken: CancellationToken, ...values: Array<contract.SqlStatementParam>): Task<Array<Array<contract.SqlResultRecord>>> {
 		return Task.run((ct: CancellationToken) => {
-			return new Promise<Array<Array<SqlResultRecord>>>((resolve, reject) => {
-				throw new Error("Don't support yet!");
-			});
+			throw new Error("Not supported");
 		}, cancellationToken);
 	}
 
-	public executeScalar(cancellationToken: CancellationToken, ...values: Array<SqlStatementParam>): Task<SqlData> {
+	public executeScalar(cancellationToken: CancellationToken, ...values: Array<contract.SqlStatementParam>): Task<contract.SqlData> {
 		return Task.run((ct: CancellationToken) => {
-			return new Promise<SqlData>((resolve, reject) => {
-				if (this._log.isTraceEnabled) {
-					this._log.trace("Executing Scalar:", this._sqlText, values);
-				}
+			return new Promise<contract.SqlData>((resolve, reject) => {
+				this._log.trace("Executing Scalar:", this._sqlText, values);
 				sqliteAllScript(this._owner.sqliteConnection, this._sqlText, values).then((underlyingResult) => {
-					if (this._log.isTraceEnabled) {
-						this._log.trace("Executed Scalar:", underlyingResult);
-					}
+					this._log.trace("Executed Scalar:", underlyingResult);
 					if (underlyingResult.length > 0) {
 						const underlyingResultFirstRow = underlyingResult[0];
 						const results = underlyingResultFirstRow[Object.keys(underlyingResultFirstRow)[0]];
@@ -245,9 +298,7 @@ class SQLiteStatement implements SqlStatement {
 					return reject(new Error("Underlying SQLite provider returns not enough data to complete request."));
 				}).catch((err) => {
 					if (err) {
-						if (this._log.isTraceEnabled) {
-							this._log.trace("Executed Scalar with error:", err);
-						}
+						this._log.trace("Executed Scalar with error:", err);
 						return reject(err);
 					}
 				});
@@ -261,7 +312,7 @@ namespace SQLiteSqlResultRecord {
 		[name: string]: any;
 	};
 }
-class SQLiteSqlResultRecord implements SqlResultRecord {
+class SQLiteSqlResultRecord implements contract.SqlResultRecord {
 	private readonly _fieldsData: any;
 	private _nameMap?: SQLiteSqlResultRecord.NameMap;
 
@@ -272,9 +323,9 @@ class SQLiteSqlResultRecord implements SqlResultRecord {
 		this._fieldsData = fieldsData;
 	}
 
-	public get(name: string): SqlData;
-	public get(index: number): SqlData;
-	public get(nameOrIndex: string | number): SqlData {
+	public get(name: string): contract.SqlData;
+	public get(index: number): contract.SqlData;
+	public get(nameOrIndex: string | number): contract.SqlData {
 		if (typeof nameOrIndex === "string") {
 			return this.getByName(nameOrIndex);
 		} else {
@@ -296,19 +347,19 @@ class SQLiteSqlResultRecord implements SqlResultRecord {
 		return this._nameMap;
 	}
 
-	private getByIndex(index: number): SqlData {
+	private getByIndex(index: number): contract.SqlData {
 		const fi = Object.keys(this._fieldsData)[index];
 		const value: any = this._fieldsData[fi];
 		return new SQLiteData(value, fi);
 	}
-	private getByName(name: string): SqlData {
+	private getByName(name: string): contract.SqlData {
 		const fi = this.nameMap[name];
 		const value: any = this._fieldsData[fi];
 		return new SQLiteData(value, fi);
 	}
 }
 
-class SQLiteTempTable extends Initable implements SqlTemporaryTable {
+class SQLiteTempTable extends Initable implements contract.SqlTemporaryTable {
 
 	private readonly _owner: SQLiteProvider;
 	private readonly _cancellationToken: CancellationToken;
@@ -323,13 +374,13 @@ class SQLiteTempTable extends Initable implements SqlTemporaryTable {
 		this._columnsDefinitions = columnsDefinitions;
 	}
 
-	public bulkInsert(cancellationToken: CancellationToken, bulkValues: Array<Array<SqlStatementParam>>): TaskLike<void> {
+	public bulkInsert(cancellationToken: CancellationToken, bulkValues: Array<Array<contract.SqlStatementParam>>): TaskLike<void> {
 		return this._owner.statement(`INSERT INTO temp.${this._tableName}`).execute(cancellationToken, bulkValues as any);
 	}
 	public crear(cancellationToken: CancellationToken): TaskLike<void> {
 		return this._owner.statement(`DELETE FROM temp.${this._tableName}`).execute(cancellationToken);
 	}
-	public insert(cancellationToken: CancellationToken, values: Array<SqlStatementParam>): Task<void> {
+	public insert(cancellationToken: CancellationToken, values: Array<contract.SqlStatementParam>): Task<void> {
 		return this._owner.statement(`INSERT INTO temp.${this._tableName}`).execute(cancellationToken, ...values);
 	}
 
@@ -350,7 +401,7 @@ class SQLiteTempTable extends Initable implements SqlTemporaryTable {
 	}
 }
 
-class SQLiteData implements SqlData {
+class SQLiteData implements contract.SqlData {
 	private readonly _sqliteValue: any;
 	private readonly _fName: string;
 
@@ -529,5 +580,26 @@ class DummyLogger implements Logger {
 	}
 	public fatal(message: string, ...args: any[]): void {
 		// dummy
+	}
+}
+
+
+namespace helpers {
+	export function openDatabase(filename: string, mode?: number): Promise<sqlite.Database> {
+		return new Promise((resolve, reject) => {
+			let db: sqlite.Database;
+			db = new sqlite.Database(filename, mode, (error) => {
+				if (error) { return reject(error); }
+				return resolve(db);
+			});
+		});
+	}
+	export function closeDatabase(db: sqlite.Database): Promise<void> {
+		return new Promise((resolve, reject) => {
+			db.close((error) => {
+				if (error) { return reject(error); }
+				return resolve();
+			});
+		});
 	}
 }
