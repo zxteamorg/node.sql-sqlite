@@ -1,7 +1,7 @@
 
 import { Logger, CancellationToken, Task as TaskLike, Financial as FinancialLike } from "@zxteam/contract";
 import { Disposable, Initable } from "@zxteam/disposable";
-import { financial } from "@zxteam/financial.js";
+import { financial, Financial } from "@zxteam/financial.js";
 import { Task } from "ptask.js";
 import * as sqlite from "sqlite3";
 import * as fs from "fs";
@@ -188,7 +188,11 @@ class SQLiteStatement implements contract.SqlStatement {
 			}
 
 			this._owner.verifyNotDisposed();
-			const underlyingResult = await helpers.sqlRun(this._owner.sqliteConnection, this._sqlText, values);
+			const underlyingResult = await helpers.sqlRun(
+				this._owner.sqliteConnection,
+				this._sqlText,
+				helpers.statementArgumentsAdapter(values)
+			);
 
 			if (this._log.isTraceEnabled) {
 				this._log.trace("Executed Scalar:", underlyingResult);
@@ -204,7 +208,11 @@ class SQLiteStatement implements contract.SqlStatement {
 			if (this._log.isTraceEnabled) {
 				this._log.trace("Executing Query:", this._sqlText, values);
 			}
-			const underlyingResult = await helpers.sqlFetch(this._owner.sqliteConnection, this._sqlText, values);
+			const underlyingResult = await helpers.sqlFetch(
+				this._owner.sqliteConnection,
+				this._sqlText,
+				helpers.statementArgumentsAdapter(values)
+			);
 
 			this._log.trace("Check cancellationToken for interrupt");
 			ct.throwIfCancellationRequested();
@@ -240,7 +248,11 @@ class SQLiteStatement implements contract.SqlStatement {
 				this._log.trace("Executing Scalar:", this._sqlText, values);
 			}
 
-			const underlyingResult = await helpers.sqlFetch(this._owner.sqliteConnection, this._sqlText, values);
+			const underlyingResult = await helpers.sqlFetch(
+				this._owner.sqliteConnection,
+				this._sqlText,
+				helpers.statementArgumentsAdapter(values)
+			);
 
 			this._log.trace("Check cancellationToken for interrupt");
 			ct.throwIfCancellationRequested();
@@ -590,6 +602,16 @@ namespace helpers {
 			} catch (e) {
 				return reject(e);
 			}
+		});
+	}
+	export function statementArgumentsAdapter(args: Array<contract.SqlStatementParam>): Array<any> {
+		return args.map(value => {
+			if (typeof value === "object") {
+				if (value !== null && Financial.isFinancialLike(value)) {
+					return Financial.toString(value); // Financial should be converted to string (SQLite know nothing about)
+				}
+			}
+			return value;
 		});
 	}
 }
