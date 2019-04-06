@@ -1,11 +1,13 @@
 const sqlite = require("sqlite3");
 const fs = require("fs");
+const path = require("path");
 const glob = require("../node_modules/glob");
 
 //** Путь к папкам где хранятся sql файлы */
 const fullPathSql = __dirname + "/../test/";
 //** Путь к базе */
-const fullPathDb = __dirname + "/../test/sqlite.db";
+const dirName = ".tmp";
+const fullPathDb = path.join(__dirname, "..", dirName, "sqlite.db");
 
 /** Установка environment */
 let env = "";
@@ -16,6 +18,9 @@ process.argv.forEach(function (val, index, array) {
 });
 
 try {
+	if (!fs.existsSync(dirName)) {
+		fs.mkdirSync(dirName);
+	}
 	if (fs.existsSync(fullPathDb)) {
 		fs.unlinkSync(fullPathDb);
 	}

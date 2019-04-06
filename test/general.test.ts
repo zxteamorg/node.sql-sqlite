@@ -43,7 +43,7 @@ const DUMMY_CANCELLATION_TOKEN: CancellationToken = {
 };
 
 function getSQLiteUrl(): string {
-	const fullPathDb = path.join(__dirname, "sqlite.db");
+	const fullPathDb = path.join(__dirname, "..", ".tmp", "sqlite.db");
 	return fullPathDb;
 }
 

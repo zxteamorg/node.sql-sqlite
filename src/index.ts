@@ -1,8 +1,8 @@
 
-import { Factory, Logger, CancellationToken, Task as TaskLike, Financial as FinancialLike } from "@zxteam/contract";
+import { Logger, CancellationToken, Task as TaskLike, Financial as FinancialLike } from "@zxteam/contract";
 import { Disposable, Initable } from "@zxteam/disposable";
 import { financial } from "@zxteam/financial.js";
-import { Task, CancelledError } from "ptask.js";
+import { Task } from "ptask.js";
 import * as sqlite from "sqlite3";
 import * as fs from "fs";
 import { promisify } from "util";
@@ -14,13 +14,9 @@ const existsAsync = promisify(fs.exists);
 
 const FINACIAL_NUMBER_DEFAULT_FRACTION = 12;
 
-
-
 export class SQLiteProviderFactory implements contract.EmbeddedSqlProviderFactory {
 	private readonly _logger: Logger;
 	private readonly _fullPathDb: string;
-
-	private _db: sqlite.Database;
 
 	// This implemenation wrap package https://www.npmjs.com/package/sqlite3
 	public constructor(opts: { fullPathDb: string, logger?: Logger }) {
@@ -204,62 +200,72 @@ class SQLiteStatement implements contract.SqlStatement {
 		cancellationToken: CancellationToken,
 		...values: Array<contract.SqlStatementParam>
 	): Task<Array<contract.SqlResultRecord>> {
-		return Task.run((ct: CancellationToken) => {
-			return new Promise<Array<contract.SqlResultRecord>>((resolve, reject) => {
-				if (this._log.isTraceEnabled) {
-					this._log.trace("Executing Query:", this._sqlText, values);
-				}
-				helpers.sqlFetch(this._owner.sqliteConnection, this._sqlText, values).then((underlyingResult) => {
-					if (this._log.isTraceEnabled) {
-						this._log.trace("Executed Scalar:", underlyingResult);
-					}
-					if (underlyingResult.length > 0) {
-						const resArray: Array<contract.SqlResultRecord> = [];
-						underlyingResult.forEach((row) => {
-							const rowz = new SQLiteSqlResultRecord(row);
-							resArray.push(rowz);
-						});
-						return resolve(resArray);
-					} else {
-						return resolve([]);
-					}
-				}).catch((err) => {
-					if (err) {
-						this._log.trace("Executed Scalar with error:", err);
-						return reject(err);
-					}
-				});
-			});
+		return Task.run(async (ct: CancellationToken) => {
+			if (this._log.isTraceEnabled) {
+				this._log.trace("Executing Query:", this._sqlText, values);
+			}
+			const underlyingResult = await helpers.sqlFetch(this._owner.sqliteConnection, this._sqlText, values);
+
+			this._log.trace("Check cancellationToken for interrupt");
+			ct.throwIfCancellationRequested();
+
+			if (this._log.isTraceEnabled) {
+				this._log.trace("Executed Scalar:", underlyingResult);
+			}
+
+			this._log.trace("Result processing");
+			if (underlyingResult.length > 0) {
+				this._log.trace("Result create new SQLiteSqlResultRecord()");
+				return underlyingResult.map((row) => new SQLiteSqlResultRecord(row));
+			} else {
+				this._log.trace("Result is empty");
+				return [];
+			}
 		}, cancellationToken);
 	}
 
 	// tslint:disable-next-line: max-line-length
 	public executeQueryMultiSets(cancellationToken: CancellationToken, ...values: Array<contract.SqlStatementParam>): Task<Array<Array<contract.SqlResultRecord>>> {
 		return Task.run((ct: CancellationToken) => {
+			if (this._log.isTraceEnabled) {
+				this._log.trace("Method executeQueryMultiSets not supported. Raise an exception.");
+			}
 			throw new Error("Not supported");
 		}, cancellationToken);
 	}
 
 	public executeScalar(cancellationToken: CancellationToken, ...values: Array<contract.SqlStatementParam>): Task<contract.SqlData> {
-		return Task.run((ct: CancellationToken) => {
-			return new Promise<contract.SqlData>((resolve, reject) => {
+		return Task.run(async (ct: CancellationToken) => {
+			if (this._log.isTraceEnabled) {
 				this._log.trace("Executing Scalar:", this._sqlText, values);
-				helpers.sqlFetch(this._owner.sqliteConnection, this._sqlText, values).then((underlyingResult) => {
-					this._log.trace("Executed Scalar:", underlyingResult);
-					if (underlyingResult.length > 0) {
-						const underlyingResultFirstRow = underlyingResult[0];
-						const results = underlyingResultFirstRow[Object.keys(underlyingResultFirstRow)[0]];
-						const fields = Object.keys(underlyingResultFirstRow)[0];
-						return resolve(new SQLiteData(results, fields));
-					}
-					return reject(new Error("Underlying SQLite provider returns not enough data to complete request."));
-				}).catch((err) => {
-					if (err) {
-						this._log.trace("Executed Scalar with error:", err);
-						return reject(err);
-					}
-				});
-			});
+			}
+
+			const underlyingResult = await helpers.sqlFetch(this._owner.sqliteConnection, this._sqlText, values);
+
+			this._log.trace("Check cancellationToken for interrupt");
+			ct.throwIfCancellationRequested();
+
+			if (this._log.isTraceEnabled) {
+				this._log.trace("Executed Scalar:", underlyingResult);
+			}
+
+			this._log.trace("Result processing");
+			if (underlyingResult.length > 0) {
+				const underlyingResultFirstRow = underlyingResult[0];
+				const results = underlyingResultFirstRow[Object.keys(underlyingResultFirstRow)[0]];
+				const fields = Object.keys(underlyingResultFirstRow)[0];
+
+				if (this._log.isTraceEnabled) {
+					this._log.trace("Create SQLiteData and return result", results, fields);
+				}
+
+				return new SQLiteData(results, fields);
+			} else {
+				if (this._log.isTraceEnabled) {
+					this._log.trace("Returns not enough data to complete request. Raise an exception.", underlyingResult);
+				}
+				throw new Error("Underlying SQLite provider returns not enough data to complete request.");
+			}
 		}, cancellationToken);
 	}
 }
@@ -539,7 +545,6 @@ class DummyLogger implements Logger {
 		// dummy
 	}
 }
-
 
 namespace helpers {
 	export function openDatabase(filename: string): Promise<sqlite.Database> {
