@@ -14,46 +14,16 @@ const existsAsync = promisify(fs.exists);
 
 const FINACIAL_NUMBER_DEFAULT_FRACTION = 12;
 
-function sqliteRunScript(instansDb: sqlite.Database, sql: string, params?: Array<any>): Promise<sqlite.RunResult> {
-	return new Promise((resolve, reject) => {
-		try {
-			instansDb.run(sql, params, function (error) {
-				if (error) {
-					reject(error);
-					return;
-				}
-				resolve(this);
-			});
-		} catch (e) {
-			reject(e);
-		}
-	});
-}
-function sqliteAllScript(instansDb: sqlite.Database, sql: string, params?: Array<any>): Promise<Array<any>> {
-	return new Promise((resolve, reject) => {
-		try {
-			instansDb.all(sql, params, (error, rows) => {
-				if (error) {
-					reject(error);
-					return;
-				}
-				resolve(rows);
-			});
-		} catch (e) {
-			reject(e);
-		}
-	});
-}
+
 
 export class SQLiteProviderFactory implements contract.EmbeddedSqlProviderFactory {
 	private readonly _logger: Logger;
 	private readonly _fullPathDb: string;
 
-	private _sqliteConnection: sqlite.Database | null;
+	private _db: sqlite.Database;
 
 	// This implemenation wrap package https://www.npmjs.com/package/sqlite3
 	public constructor(opts: { fullPathDb: string, logger?: Logger }) {
-		this._sqliteConnection = null;
 		this._logger = opts.logger || new DummyLogger();
 		this._fullPathDb = opts.fullPathDb;
 
@@ -61,57 +31,48 @@ export class SQLiteProviderFactory implements contract.EmbeddedSqlProviderFactor
 	}
 
 	public create(cancellationToken?: CancellationToken): Task<contract.SqlProvider> {
-		const disposer = (connection: sqlite.Database): Promise<void> => {
-			connection.close((error) => {
-				if (error) {
-					return Promise.reject(error);
+		return Task.run(async (ct) => {
+			this._logger.trace("Inside create() ...");
+
+			if (this._logger.isTraceEnabled) {
+				this._logger.trace(`Checking a database file  ${this._fullPathDb} for existent`);
+			}
+			const isDatabaseFileExists = await existsAsync(this._fullPathDb);
+
+			this._logger.trace("Check cancellationToken for interrupt");
+			ct.throwIfCancellationRequested();
+
+			if (!isDatabaseFileExists) {
+				if (this._logger.isTraceEnabled) {
+					this._logger.trace(`The database file ${this._fullPathDb} was not found. Raise exception...`);
 				}
-				this._sqliteConnection = null;
-				return Promise.resolve();
-			});
-			return Promise.resolve();
-		};
-
-		return Task.run((ct) => new Promise<contract.SqlProvider>((resolve, reject) => {
-			this._logger.trace("Creating SQLite SqlProvider..");
-
-			if (ct.isCancellationRequested) { return reject(new CancelledError()); }
-
-
-			if (!fs.existsSync(this._fullPathDb)) {
-				throw new Error(`Don't exist file database ${this._fullPathDb}`);
+				throw new Error(`The database file ${this._fullPathDb} was not found`);
 			}
-			if (this._sqliteConnection === null) {
-				const sqlite3 = sqlite.verbose();
-				this._sqliteConnection = new sqlite3.Database(this._fullPathDb, (error) => {
-					if (error) {
-						reject(error);
-						return;
-					}
-				});
+
+			if (this._logger.isTraceEnabled) {
+				this._logger.trace(`Opening the database file  ${this._fullPathDb}`);
 			}
-			if (ct.isCancellationRequested) { return reject(new CancelledError()); }
+			const underlayingSqliteConnection = await helpers.openDatabase(this._fullPathDb);
 			try {
-				this._logger.trace("Created SQLite SqlProvider");
-				if (this._sqliteConnection === null) { throw new Error("Don't have database Sqlite"); }
-				const sqlProvider: contract.SqlProvider = new SQLiteProvider(this._sqliteConnection,
-					() => disposer(this._sqliteConnection as any), this._logger);
-				this._logger.trace("Created SQLite SqlProvider");
-				return resolve(sqlProvider);
+				this._logger.trace("Check cancellationToken for interrupt");
+				ct.throwIfCancellationRequested();
+
+				const sqlProvider: contract.SqlProvider = new SQLiteProvider(
+					underlayingSqliteConnection,
+					() => helpers.closeDatabase(underlayingSqliteConnection),
+					this._logger
+				);
+
+				if (this._logger.isTraceEnabled) {
+					this._logger.trace(`The database file  ${this._fullPathDb} was opened successfully`);
+				}
+
+				return sqlProvider;
 			} catch (e) {
-				this._sqliteConnection.close((error) => {
-					if (error) {
-						// WHAT IS THIS????
-						Promise.reject(error);
-						return;
-					}
-					// WHAT IS THIS????
-					Promise.resolve();
-				});
-				this._logger.trace("Failed to create SQLite SqlProvider", e);
-				return reject(e);
+				await helpers.closeDatabase(underlayingSqliteConnection);
+				throw e;
 			}
-		}), cancellationToken);
+		}, cancellationToken);
 	}
 
 	public newDatabase(cancellationToken: CancellationToken, locationUrl: URL, initScriptUrl?: URL): Task<void> {
@@ -201,6 +162,10 @@ class SQLiteProvider extends Disposable implements contract.SqlProvider {
 		}, cancellationToken || undefined);
 	}
 
+	public verifyNotDisposed(): void {
+		super.verifyNotDisposed();
+	}
+
 	protected async onDispose(): Promise<void> {
 		this._log.trace("Disposing");
 		await this._disposer();
@@ -221,25 +186,17 @@ class SQLiteStatement implements contract.SqlStatement {
 	}
 
 	public execute(cancellationToken: CancellationToken, ...values: Array<contract.SqlStatementParam>): Task<void> {
-		return Task.run((ct: CancellationToken) => {
-			return new Promise<void>((resolve, reject) => {
-				if (this._log.isTraceEnabled) {
-					this._log.trace("Executing Query:", this._sqlText, values);
-				}
-				sqliteRunScript(this._owner.sqliteConnection, this._sqlText, values).then((underlyingResult) => {
-					if (this._log.isTraceEnabled) {
-						this._log.trace("Executed Scalar:", underlyingResult);
-					}
-					return resolve();
-				}).catch((err) => {
-					if (err) {
-						if (this._log.isTraceEnabled) {
-							this._log.trace("Executed Scalar with error:", err);
-						}
-						return reject(err);
-					}
-				});
-			});
+		return Task.run(async () => {
+			if (this._log.isTraceEnabled) {
+				this._log.trace("Executing Query:", this._sqlText, values);
+			}
+
+			this._owner.verifyNotDisposed();
+			const underlyingResult = await helpers.sqlRun(this._owner.sqliteConnection, this._sqlText, values);
+
+			if (this._log.isTraceEnabled) {
+				this._log.trace("Executed Scalar:", underlyingResult);
+			}
 		}, cancellationToken);
 	}
 
@@ -252,7 +209,7 @@ class SQLiteStatement implements contract.SqlStatement {
 				if (this._log.isTraceEnabled) {
 					this._log.trace("Executing Query:", this._sqlText, values);
 				}
-				sqliteAllScript(this._owner.sqliteConnection, this._sqlText, values).then((underlyingResult) => {
+				helpers.sqlFetch(this._owner.sqliteConnection, this._sqlText, values).then((underlyingResult) => {
 					if (this._log.isTraceEnabled) {
 						this._log.trace("Executed Scalar:", underlyingResult);
 					}
@@ -287,7 +244,7 @@ class SQLiteStatement implements contract.SqlStatement {
 		return Task.run((ct: CancellationToken) => {
 			return new Promise<contract.SqlData>((resolve, reject) => {
 				this._log.trace("Executing Scalar:", this._sqlText, values);
-				sqliteAllScript(this._owner.sqliteConnection, this._sqlText, values).then((underlyingResult) => {
+				helpers.sqlFetch(this._owner.sqliteConnection, this._sqlText, values).then((underlyingResult) => {
 					this._log.trace("Executed Scalar:", underlyingResult);
 					if (underlyingResult.length > 0) {
 						const underlyingResultFirstRow = underlyingResult[0];
@@ -585,10 +542,10 @@ class DummyLogger implements Logger {
 
 
 namespace helpers {
-	export function openDatabase(filename: string, mode?: number): Promise<sqlite.Database> {
+	export function openDatabase(filename: string): Promise<sqlite.Database> {
 		return new Promise((resolve, reject) => {
 			let db: sqlite.Database;
-			db = new sqlite.Database(filename, mode, (error) => {
+			db = new sqlite.Database(filename, (error) => {
 				if (error) { return reject(error); }
 				return resolve(db);
 			});
@@ -600,6 +557,34 @@ namespace helpers {
 				if (error) { return reject(error); }
 				return resolve();
 			});
+		});
+	}
+	export function sqlRun(instansDb: sqlite.Database, sql: string, params?: Array<any>): Promise<sqlite.RunResult> {
+		return new Promise((resolve, reject) => {
+			try {
+				instansDb.run(sql, params, function (error) {
+					if (error) {
+						return reject(error);
+					}
+					return resolve(this);
+				});
+			} catch (e) {
+				return reject(e);
+			}
+		});
+	}
+	export function sqlFetch(instansDb: sqlite.Database, sql: string, params?: Array<any>): Promise<Array<any>> {
+		return new Promise((resolve, reject) => {
+			try {
+				instansDb.all(sql, params, (error, rows) => {
+					if (error) {
+						return reject(error);
+					}
+					return resolve(rows);
+				});
+			} catch (e) {
+				return reject(e);
+			}
 		});
 	}
 }
