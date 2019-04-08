@@ -679,7 +679,7 @@ namespace helpers {
 		});
 	}
 	function parseCommands(commands: string): Array<string> {
-		const lines = commands.split("\r");
+		const lines = commands.split("\r\n");
 		let allCommands = [];
 		let command = "";
 		for (let i = 0; i < lines.length; i++) {
