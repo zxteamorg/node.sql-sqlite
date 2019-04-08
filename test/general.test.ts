@@ -5,7 +5,6 @@ import { SqlProvider } from "@zxteam/contract.sql";
 
 import * as lib from "../src";
 import { Financial } from "@zxteam/financial.js";
-const path = require("path");
 
 declare global {
 	namespace Chai {
@@ -43,9 +42,9 @@ const DUMMY_CANCELLATION_TOKEN: CancellationToken = {
 	throwIfCancellationRequested(): void { /* STUB */ }
 };
 
-function getSQLiteUrl(): string {
-	const fullPathDb = path.join(__dirname, "..", ".tmp", "sqlite.db");
-	return fullPathDb;
+function getSQLiteUrl(): URL {
+	const fullPathDb = "file:///" + __dirname + "/.." + "/.tmp" + "/sqlite.db";
+	return new URL(fullPathDb);
 }
 
 

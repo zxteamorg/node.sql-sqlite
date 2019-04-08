@@ -2,7 +2,8 @@
 import { Logger, CancellationToken, Task as TaskLike, Financial as FinancialLike } from "@zxteam/contract";
 import { Disposable, Initable } from "@zxteam/disposable";
 import { financial, Financial } from "@zxteam/financial.js";
-import { Task } from "ptask.js";
+import { WebClient } from "@zxteam/webclient";
+import { Task, WrapError } from "ptask.js";
 import * as sqlite from "sqlite3";
 import * as fs from "fs";
 import { promisify } from "util";
@@ -16,10 +17,10 @@ const FINACIAL_NUMBER_DEFAULT_FRACTION = 12;
 
 export class SQLiteProviderFactory implements contract.EmbeddedSqlProviderFactory {
 	private readonly _logger: Logger;
-	private readonly _fullPathDb: string;
+	private readonly _fullPathDb: URL;
 
 	// This implemenation wrap package https://www.npmjs.com/package/sqlite3
-	public constructor(opts: { fullPathDb: string, logger?: Logger }) {
+	public constructor(opts: { fullPathDb: URL, logger?: Logger }) {
 		this._logger = opts.logger || new DummyLogger();
 		this._fullPathDb = opts.fullPathDb;
 
@@ -71,29 +72,21 @@ export class SQLiteProviderFactory implements contract.EmbeddedSqlProviderFactor
 		}, cancellationToken);
 	}
 
-	public newDatabase(cancellationToken: CancellationToken, locationUrl: URL, initScriptUrl?: URL): Task<void> {
+	public newDatabase(cancellationToken: CancellationToken, initScriptUrl?: URL): Task<void> {
 		return Task.run(async () => {
 			this._logger.trace("Inside newDatabase()");
 
-			if (initScriptUrl !== undefined) {
-				this._logger.trace("User passed initScriptUrl argument, but code is not supported this argument right now. Raise an exception.");
-				throw new Error("Not implemented yet");
-			}
-
-			this._logger.trace("Convert URL location to path notation");
-			const filename = fileURLToPath(locationUrl);
-
 			if (this._logger.isTraceEnabled) {
-				this._logger.trace(`Check is file ${filename} exists`);
+				this._logger.trace(`Check is file ${this._fullPathDb} exists`);
 			}
 
 			{ // scope
-				const isExist = await existsAsync(filename);
+				const isExist = await existsAsync(this._fullPathDb);
 				if (isExist) {
 					if (this._logger.isTraceEnabled) {
-						this._logger.trace(`The file ${filename} exists. Raise an exception about this problem`);
+						this._logger.trace(`The file ${this._fullPathDb} exists. Raise an exception about this problem`);
 					}
-					throw new Error(`Cannot create new database due the file ${locationUrl} already exists`);
+					throw new Error(`Cannot create new database due the file ${this._fullPathDb} already exists`);
 				}
 			}
 
@@ -101,7 +94,7 @@ export class SQLiteProviderFactory implements contract.EmbeddedSqlProviderFactor
 			cancellationToken.throwIfCancellationRequested();
 
 			this._logger.trace("Open SQLite database for non-exsting file");
-			const db = await helpers.openDatabase(filename);
+			const db = await helpers.openDatabase(this._fullPathDb);
 
 			this._logger.trace("Checking cancellationToken between Open and Close may provide memory leaks. So we do not check it at all");
 
@@ -113,12 +106,49 @@ export class SQLiteProviderFactory implements contract.EmbeddedSqlProviderFactor
 
 			this._logger.trace("Double check that DB file was created");
 			{ // scope
-				const isExist = await existsAsync(filename);
+				const isExist = await existsAsync(this._fullPathDb);
 				if (!isExist) {
 					if (this._logger.isTraceEnabled) {
-						this._logger.trace(`Something went wrong. The DB file ${locationUrl} still not exists after Open/Close SQLite.`);
+						this._logger.trace(`Something went wrong. The DB file ${this._fullPathDb} still not exists after Open/Close SQLite.`);
 					}
 					throw new Error("Underlaying library SQLite did not create DB file.");
+				}
+			}
+
+			if (initScriptUrl !== undefined) {
+				this._logger.trace("Read file and processing");
+				const sqlCommands = await helpers.loadScript(cancellationToken, initScriptUrl);
+
+				if (sqlCommands.length < 1) {
+					this._logger.trace("File init script do not have sql commands");
+					return;
+				}
+
+				if (this._logger.isTraceEnabled) {
+					this._logger.trace("Initialize variable for new SQLiteProviderFactory", this._fullPathDb);
+				}
+				const fullPathDb = this._fullPathDb;
+				const logger = this._logger;
+
+				this._logger.trace("Initialize new SQLiteProviderFactory()");
+				const providerFactory = await new SQLiteProviderFactory({ fullPathDb, logger });
+				const provider = await providerFactory.create();
+				try {
+					this._logger.trace("Execute sql script for db");
+					for (let i = 0; i < sqlCommands.length; i++) {
+						const command = sqlCommands[i];
+
+						if (this._logger.isTraceEnabled) {
+							this._logger.trace("Execute sql script: ", command);
+						}
+						await provider.statement(command).execute(cancellationToken);
+
+						this._logger.trace("Check cancellationToken for interrupt");
+						cancellationToken.throwIfCancellationRequested();
+					}
+				} finally {
+					this._logger.trace("Dispose new SQLiteProviderFactory()");
+					provider.dispose();
 				}
 			}
 		});
@@ -559,10 +589,11 @@ class DummyLogger implements Logger {
 }
 
 namespace helpers {
-	export function openDatabase(filename: string): Promise<sqlite.Database> {
+	export function openDatabase(filename: URL): Promise<sqlite.Database> {
 		return new Promise((resolve, reject) => {
 			let db: sqlite.Database;
-			db = new sqlite.Database(filename, (error) => {
+			const fullPathDb = fileURLToPath(filename);
+			db = new sqlite.Database(fullPathDb, (error) => {
 				if (error) { return reject(error); }
 				return resolve(db);
 			});
@@ -613,5 +644,54 @@ namespace helpers {
 			}
 			return value;
 		});
+	}
+	export function loadScript(cancellationToken: CancellationToken, urlPath: URL): Promise<Array<string>> {
+		return new Promise(async (resolve, reject) => {
+			if (urlPath.protocol === "file:") {
+				return resolve(loadScriptFromFile(cancellationToken, urlPath));
+			} else if (urlPath.protocol === "http:") {
+				return resolve(loadScriptFromHttp(cancellationToken, urlPath));
+			}
+			throw new Error(`Do not support this protocol: ${urlPath.protocol}`);
+		});
+	}
+	function loadScriptFromFile(cancellationToken: CancellationToken, urlPath: URL): Promise<Array<string>> {
+		return new Promise(async (resolve, reject) => {
+			const initScriptPath = fileURLToPath(urlPath);
+			const sqlScripts = await fs.readFileSync(initScriptPath, "utf8");
+			const allCommands = parseCommands(sqlScripts);
+			return resolve(allCommands);
+		});
+	}
+	function loadScriptFromHttp(cancellationToken: CancellationToken, urlPath: URL): Promise<Array<string>> {
+		return new Promise(async (resolve, reject) => {
+			const webClient = new WebClient();
+			const bufferRes = await webClient.invoke(cancellationToken, { url: urlPath, method: "GET" });
+
+			if (bufferRes.statusCode !== 200) {
+				throw new Error(`Unsuccessful operation code status ${bufferRes.statusCode}`);
+			}
+
+			const sqlScripts = bufferRes.body.toString("utf8");
+
+			const allCommands = parseCommands(sqlScripts);
+			return resolve(allCommands);
+		});
+	}
+	function parseCommands(commands: string): Array<string> {
+		const lines = commands.split("\r");
+		let allCommands = [];
+		let command = "";
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i];
+			if (!((!line) || line.startsWith("--"))) {
+				command += line;
+				if (command.endsWith(";")) {
+					allCommands.push(command);
+					command = "";
+				}
+			}
+		}
+		return allCommands;
 	}
 }

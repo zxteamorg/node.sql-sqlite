@@ -1,6 +1,6 @@
 {
 	"name": "@zxteam/sql.sqlite",
-	"version": "0.0.5",
+	"version": "0.0.6",
 	"description": "ZXTeam's SQL implementation for SQLite",
 	"main": "./src/index.js",
 	"types": "./src/index.d.ts",
@@ -28,6 +28,7 @@
 		"@zxteam/contract.sql": "^3.2.5",
 		"@zxteam/disposable": "^3.2.2",
 		"@zxteam/financial.js": "^3.2.1",
+		"@zxteam/webclient": "3.2.1",
 		"ptask.js": "^3.2.1",
 		"sqlite3": "^4.0.6"
 	},
