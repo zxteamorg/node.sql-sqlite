@@ -1,6 +1,6 @@
 {
 	"name": "@zxteam/sql.sqlite",
-	"version": "0.0.7",
+	"version": "0.0.8",
 	"description": "ZXTeam's SQL implementation for SQLite",
 	"main": "./src/index.js",
 	"types": "./src/index.d.ts",
