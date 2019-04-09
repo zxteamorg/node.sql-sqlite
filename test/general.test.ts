@@ -305,7 +305,6 @@ describe("SQLite Tests", function () {
 		}
 		assert.fail("No exceptions", "Exception with code: SQLITE_ERROR");
 	});
-
 	it("Should be able to create temporary table", async function () {
 		const tempTable = await getSqlProvider().createTempTable(
 			DUMMY_CANCELLATION_TOKEN,
@@ -336,7 +335,6 @@ describe("SQLite Tests", function () {
 		assert.equal(resultArrayAfterDestoroyTempTable[0].get("intValue").asNumber, 1);
 		assert.equal(resultArrayAfterDestoroyTempTable[0].get("varcharValue").asString, "one");
 	});
-
 	it("Should be able to pass null into query args", async function () {
 		const result1 = await getSqlProvider()
 			.statement("SELECT 1 WHERE ? IS NULL")
@@ -354,7 +352,15 @@ describe("SQLite Tests", function () {
 			.executeScalar(DUMMY_CANCELLATION_TOKEN, Financial.parse("42.123"));
 		assert.equal(result1.asString, "42.123");
 	});
-
+	it("Read with IN condition", async function () {
+		const result = await getSqlProvider()
+			.statement("SELECT \"varchar\" FROM \"tb_1\" WHERE \"int\" IN (?)")
+			.executeQuery(DUMMY_CANCELLATION_TOKEN, [1, 3]);
+		assert.isArray(result);
+		assert.equal(result.length, 2);
+		assert.equal(result[0].get("varchar").asString, "one");
+		assert.equal(result[1].get("varchar").asString, "three");
+	});
 	it.skip("Read two Result Sets via sp_multi_fetch", async function () {
 		const resultSets = await getSqlProvider()
 			.statement("CALL sp_multi_fetch()")
