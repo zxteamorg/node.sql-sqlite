@@ -12,19 +12,20 @@ import { URL, fileURLToPath } from "url";
 import * as contract from "@zxteam/contract.sql";
 
 const existsAsync = promisify(fs.exists);
+const readFileAsync = promisify(fs.readFile);
 
 const FINACIAL_NUMBER_DEFAULT_FRACTION = 12;
 
-export class SQLiteProviderFactory implements contract.EmbeddedSqlProviderFactory {
+export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactory {
 	private readonly _logger: Logger;
-	private readonly _fullPathDb: URL;
+	private readonly _url: URL;
 
 	// This implemenation wrap package https://www.npmjs.com/package/sqlite3
-	public constructor(opts: { fullPathDb: URL, logger?: Logger }) {
-		this._logger = opts.logger || new DummyLogger();
-		this._fullPathDb = opts.fullPathDb;
+	public constructor(url: URL, logger?: Logger) {
+		this._logger = logger || new DummyLogger();
+		this._url = url;
 
-		this._logger.trace("SQLiteProviderFactory Constructed");
+		this._logger.trace("SqliteProviderFactory Constructed");
 	}
 
 	public create(cancellationToken?: CancellationToken): Task<contract.SqlProvider> {
@@ -32,24 +33,24 @@ export class SQLiteProviderFactory implements contract.EmbeddedSqlProviderFactor
 			this._logger.trace("Inside create() ...");
 
 			if (this._logger.isTraceEnabled) {
-				this._logger.trace(`Checking a database file  ${this._fullPathDb} for existent`);
+				this._logger.trace(`Checking a database file  ${this._url} for existent`);
 			}
-			const isDatabaseFileExists = await existsAsync(this._fullPathDb);
+			const isDatabaseFileExists = await existsAsync(this._url);
 
 			this._logger.trace("Check cancellationToken for interrupt");
 			ct.throwIfCancellationRequested();
 
 			if (!isDatabaseFileExists) {
 				if (this._logger.isTraceEnabled) {
-					this._logger.trace(`The database file ${this._fullPathDb} was not found. Raise exception...`);
+					this._logger.trace(`The database file ${this._url} was not found. Raise exception...`);
 				}
-				throw new Error(`The database file ${this._fullPathDb} was not found`);
+				throw new Error(`The database file ${this._url} was not found`);
 			}
 
 			if (this._logger.isTraceEnabled) {
-				this._logger.trace(`Opening the database file  ${this._fullPathDb}`);
+				this._logger.trace(`Opening the database file  ${this._url}`);
 			}
-			const underlayingSqliteConnection = await helpers.openDatabase(this._fullPathDb);
+			const underlayingSqliteConnection = await helpers.openDatabase(this._url);
 			try {
 				this._logger.trace("Check cancellationToken for interrupt");
 				ct.throwIfCancellationRequested();
@@ -61,7 +62,7 @@ export class SQLiteProviderFactory implements contract.EmbeddedSqlProviderFactor
 				);
 
 				if (this._logger.isTraceEnabled) {
-					this._logger.trace(`The database file  ${this._fullPathDb} was opened successfully`);
+					this._logger.trace(`The database file  ${this._url} was opened successfully`);
 				}
 
 				return sqlProvider;
@@ -77,16 +78,16 @@ export class SQLiteProviderFactory implements contract.EmbeddedSqlProviderFactor
 			this._logger.trace("Inside newDatabase()");
 
 			if (this._logger.isTraceEnabled) {
-				this._logger.trace(`Check is file ${this._fullPathDb} exists`);
+				this._logger.trace(`Check is file ${this._url} exists`);
 			}
 
 			{ // scope
-				const isExist = await existsAsync(this._fullPathDb);
+				const isExist = await existsAsync(this._url);
 				if (isExist) {
 					if (this._logger.isTraceEnabled) {
-						this._logger.trace(`The file ${this._fullPathDb} exists. Raise an exception about this problem`);
+						this._logger.trace(`The file ${this._url} already exists. Raise an exception about this problem`);
 					}
-					throw new Error(`Cannot create new database due the file ${this._fullPathDb} already exists`);
+					throw new Error(`Cannot create new database due the file ${this._url} already exists`);
 				}
 			}
 
@@ -94,68 +95,37 @@ export class SQLiteProviderFactory implements contract.EmbeddedSqlProviderFactor
 			cancellationToken.throwIfCancellationRequested();
 
 			this._logger.trace("Open SQLite database for non-exsting file");
-			const db = await helpers.openDatabase(this._fullPathDb);
-
-			this._logger.trace("Checking cancellationToken between Open and Close may provide memory leaks. So we do not check it at all");
-
-			this._logger.trace("Close SQLite database");
-			await helpers.closeDatabase(db);
+			const db = await helpers.openDatabase(this._url);
+			try {
+				if (initScriptUrl !== undefined) {
+					this._logger.trace("initScriptUrl is presented. Let's go to initalizeDatabaseByScript()");
+					await helpers.initalizeDatabaseByScript(cancellationToken, initScriptUrl, db, this._logger);
+				} else {
+					this._logger.trace("initScriptUrl is NOT presented");
+				}
+			} finally {
+				this._logger.trace("Close SQLite database");
+				await helpers.closeDatabase(db);
+			}
 
 			this._logger.trace("Check cancellationToken for interrupt");
 			cancellationToken.throwIfCancellationRequested();
 
 			this._logger.trace("Double check that DB file was created");
 			{ // scope
-				const isExist = await existsAsync(this._fullPathDb);
+				const isExist = await existsAsync(this._url);
 				if (!isExist) {
 					if (this._logger.isTraceEnabled) {
-						this._logger.trace(`Something went wrong. The DB file ${this._fullPathDb} still not exists after Open/Close SQLite.`);
+						this._logger.trace(`Something went wrong. The DB file ${this._url} still not exists after Open/Close SQLite.`);
 					}
 					throw new Error("Underlaying library SQLite did not create DB file.");
-				}
-			}
-
-			if (initScriptUrl !== undefined) {
-				this._logger.trace("Read file and processing");
-				const sqlCommands = await helpers.loadScript(cancellationToken, initScriptUrl);
-
-				if (sqlCommands.length < 1) {
-					this._logger.trace("File init script do not have sql commands");
-					return;
-				}
-
-				if (this._logger.isTraceEnabled) {
-					this._logger.trace("Initialize variable for new SQLiteProviderFactory", this._fullPathDb);
-				}
-				const fullPathDb = this._fullPathDb;
-				const logger = this._logger;
-
-				this._logger.trace("Initialize new SQLiteProviderFactory()");
-				const providerFactory = await new SQLiteProviderFactory({ fullPathDb, logger });
-				const provider = await providerFactory.create();
-				try {
-					this._logger.trace("Execute sql script for db");
-					for (let i = 0; i < sqlCommands.length; i++) {
-						const command = sqlCommands[i];
-
-						if (this._logger.isTraceEnabled) {
-							this._logger.trace("Execute sql script: ", command);
-						}
-						await provider.statement(command).execute(cancellationToken);
-
-						this._logger.trace("Check cancellationToken for interrupt");
-						cancellationToken.throwIfCancellationRequested();
-					}
-				} finally {
-					this._logger.trace("Dispose new SQLiteProviderFactory()");
-					provider.dispose();
 				}
 			}
 		});
 	}
 }
 
-export default SQLiteProviderFactory;
+export default SqliteProviderFactory;
 
 class ArgumentError extends Error { }
 class InvalidOperationError extends Error { }
@@ -645,38 +615,61 @@ namespace helpers {
 			return value;
 		});
 	}
-	export function loadScript(cancellationToken: CancellationToken, urlPath: URL): Promise<Array<string>> {
-		return new Promise(async (resolve, reject) => {
-			if (urlPath.protocol === "file:") {
-				return resolve(loadScriptFromFile(cancellationToken, urlPath));
-			} else if (urlPath.protocol === "http:") {
-				return resolve(loadScriptFromHttp(cancellationToken, urlPath));
+	export async function initalizeDatabaseByScript(
+		cancellationToken: CancellationToken, initScriptUrl: URL, db: sqlite.Database, logger: Logger
+	) {
+		if (initScriptUrl !== undefined) {
+			logger.trace("Loading script...");
+			const sqlCommands = await loadScriptAndParseScript(cancellationToken, initScriptUrl);
+
+			if (sqlCommands.length === 0) {
+				logger.trace("File init script do not have sql commands");
+				return;
 			}
-			throw new Error(`Do not support this protocol: ${urlPath.protocol}`);
-		});
+
+			logger.trace("Check cancellationToken for interrupt");
+			cancellationToken.throwIfCancellationRequested();
+
+			for (let i = 0; i < sqlCommands.length; i++) {
+				const command = sqlCommands[i];
+
+				if (logger.isTraceEnabled) {
+					logger.trace("Execute sql script: ", command);
+				}
+
+				await helpers.sqlRun(db, command);
+
+				logger.trace("Check cancellationToken for interrupt");
+				cancellationToken.throwIfCancellationRequested();
+			}
+		}
 	}
-	function loadScriptFromFile(cancellationToken: CancellationToken, urlPath: URL): Promise<Array<string>> {
-		return new Promise(async (resolve, reject) => {
+	async function loadScriptAndParseScript(cancellationToken: CancellationToken, urlPath: URL): Promise<Array<string>> {
+		const sqlScriptContent = await loadScript(cancellationToken, urlPath);
+		const sqlCommands = parseCommands(sqlScriptContent);
+		return sqlCommands;
+	}
+	function loadScript(cancellationToken: CancellationToken, urlPath: URL): Promise<string> {
+		if (urlPath.protocol === "file:") {
 			const initScriptPath = fileURLToPath(urlPath);
-			const sqlScripts = await fs.readFileSync(initScriptPath, "utf8");
-			const allCommands = parseCommands(sqlScripts);
-			return resolve(allCommands);
-		});
+			return loadScriptFromFile(cancellationToken, initScriptPath);
+		} else if (urlPath.protocol === "http:") {
+			return loadScriptFromHttp(cancellationToken, urlPath);
+		}
+		throw new Error(`Do not support this protocol: ${urlPath.protocol}`);
 	}
-	function loadScriptFromHttp(cancellationToken: CancellationToken, urlPath: URL): Promise<Array<string>> {
-		return new Promise(async (resolve, reject) => {
-			const webClient = new WebClient();
-			const bufferRes = await webClient.invoke(cancellationToken, { url: urlPath, method: "GET" });
+	async function loadScriptFromFile(cancellationToken: CancellationToken, filename: string): Promise<string> {
+		return readFileAsync(filename, "utf8");
+	}
+	async function loadScriptFromHttp(cancellationToken: CancellationToken, urlPath: URL): Promise<string> {
+		const webClient = new WebClient();
+		const invokeResponse = await webClient.invoke(cancellationToken, { url: urlPath, method: "GET" });
 
-			if (bufferRes.statusCode !== 200) {
-				throw new Error(`Unsuccessful operation code status ${bufferRes.statusCode}`);
-			}
+		if (invokeResponse.statusCode !== 200) {
+			throw new Error(`Cannot read remote SQL script. Unsuccessful operation code status ${invokeResponse.statusCode}`);
+		}
 
-			const sqlScripts = bufferRes.body.toString("utf8");
-
-			const allCommands = parseCommands(sqlScripts);
-			return resolve(allCommands);
-		});
+		return invokeResponse.body.toString("utf8");
 	}
 	function parseCommands(commands: string): Array<string> {
 		const lines = commands.split("\n");

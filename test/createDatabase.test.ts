@@ -1,10 +1,12 @@
 import * as chai from "chai";
 import { CancellationToken } from "@zxteam/contract";
-import ensureFactory from "@zxteam/ensure.js";
+import * as fs from "fs";
+import * as http from "http";
+import * as os from "os";
+import * as path from "path";
+import { URL, fileURLToPath, pathToFileURL } from "url";
 
 import * as lib from "../src";
-const fs = require("fs");
-import { URL, fileURLToPath } from "url";
 
 chai.use(require("chai-datetime"));
 chai.use(function (c, u) {
@@ -25,8 +27,6 @@ chai.use(function (c, u) {
 
 const { assert } = chai;
 
-const ensureTestDbUrl = ensureFactory((message, data) => { throw new Error(`Unexpected value of TEST_DB_URL. ${message}`); });
-
 const DUMMY_CANCELLATION_TOKEN: CancellationToken = {
 	get isCancellationRequested(): boolean { return false; },
 	addCancelListener(cb: Function): void { /* STUB */ },
@@ -35,17 +35,18 @@ const DUMMY_CANCELLATION_TOKEN: CancellationToken = {
 };
 
 function getSQLiteUrltoDb(): URL {
-	const pathTodb = __dirname + "/.." + "/.tmp" + "/sqliteForCreateTest.db";
-	const fullPathDb = "file:///" + pathTodb;
-	return new URL(fullPathDb);
+	const tmpDirectory = os.tmpdir();
+	const pathToDB = path.join(tmpDirectory, "sqliteForCreateTest.db");
+	const urlToDB = pathToFileURL(pathToDB);
+	return urlToDB;
 }
 function getSQLiteUrltoSqlFile(): URL {
-	const fullPathDb = "file:///" + __dirname + "/.." + "/test" + "/general.test.sql";
-	return new URL(fullPathDb);
+	const pathToSqlScript = path.join(__dirname, "general.test.sql");
+	const urlToDB = pathToFileURL(pathToSqlScript);
+	return urlToDB;
 }
 function getSQLiteUrltoSqlHref(): URL {
-	const fullPathDb = "http://vmhost01.zxteam.net/~maxim.anurin/tmp/general.test.sql";
-	return new URL(fullPathDb);
+	return new URL("http://localhost:8080/general.test.sql");
 }
 
 describe("SQLite Create Database", function () {
@@ -56,7 +57,7 @@ describe("SQLite Create Database", function () {
 		}
 	});
 	it("Create database", async function () {
-		const sqlProviderFactory = new lib.SQLiteProviderFactory({ fullPathDb: getSQLiteUrltoDb() });
+		const sqlProviderFactory = new lib.SqliteProviderFactory(getSQLiteUrltoDb());
 		await sqlProviderFactory.newDatabase(DUMMY_CANCELLATION_TOKEN);
 		const db = await sqlProviderFactory.create();
 		try {
@@ -67,7 +68,7 @@ describe("SQLite Create Database", function () {
 		}
 	});
 	it("Cannot open database because do not exist", async function () {
-		const sqlProviderFactory = new lib.SQLiteProviderFactory({ fullPathDb: getSQLiteUrltoDb() });
+		const sqlProviderFactory = new lib.SqliteProviderFactory(getSQLiteUrltoDb());
 		try {
 			const db = await sqlProviderFactory.create();
 		} catch (err) {
@@ -77,7 +78,7 @@ describe("SQLite Create Database", function () {
 		assert.fail("No exceptions");
 	});
 	it("Create database and run file init script", async function () {
-		const sqlProviderFactory = new lib.SQLiteProviderFactory({ fullPathDb: getSQLiteUrltoDb() });
+		const sqlProviderFactory = new lib.SqliteProviderFactory(getSQLiteUrltoDb());
 		await sqlProviderFactory.newDatabase(DUMMY_CANCELLATION_TOKEN, getSQLiteUrltoSqlFile());
 		const db = await sqlProviderFactory.create();
 		try {
@@ -94,21 +95,43 @@ describe("SQLite Create Database", function () {
 		}
 	});
 	it("Create database and run href init script", async function () {
-		const sqlProviderFactory = new lib.SQLiteProviderFactory({ fullPathDb: getSQLiteUrltoDb() });
-		await sqlProviderFactory.newDatabase(DUMMY_CANCELLATION_TOKEN, getSQLiteUrltoSqlHref());
-		const db = await sqlProviderFactory.create();
+		const pathTodb = fileURLToPath(getSQLiteUrltoSqlFile());
+		const scriptContent = fs.readFileSync(pathTodb, "utf-8");
+		const httpServer = await helper.startHttpServer(scriptContent);
 		try {
-			const arraySqlData = await db.statement("SELECT varcharValue, intValue FROM 'tb_1';").executeQuery(DUMMY_CANCELLATION_TOKEN);
-			assert.equal(arraySqlData[0].get("varcharValue").asString, "one");
-			assert.equal(arraySqlData[1].get("varcharValue").asString, "two");
-			assert.equal(arraySqlData[2].get("varcharValue").asString, "three");
+			const sqlProviderFactory = new lib.SqliteProviderFactory(getSQLiteUrltoDb());
+			await sqlProviderFactory.newDatabase(DUMMY_CANCELLATION_TOKEN, getSQLiteUrltoSqlHref());
+			const db = await sqlProviderFactory.create();
+			try {
+				const arraySqlData = await db.statement("SELECT varcharValue, intValue FROM 'tb_1';").executeQuery(DUMMY_CANCELLATION_TOKEN);
+				assert.equal(arraySqlData[0].get("varcharValue").asString, "one");
+				assert.equal(arraySqlData[1].get("varcharValue").asString, "two");
+				assert.equal(arraySqlData[2].get("varcharValue").asString, "three");
 
-			assert.equal(arraySqlData[0].get("intValue").asNumber, 1);
-			assert.equal(arraySqlData[1].get("intValue").asNumber, 2);
-			assert.equal(arraySqlData[2].get("intValue").asNumber, 3);
+				assert.equal(arraySqlData[0].get("intValue").asNumber, 1);
+				assert.equal(arraySqlData[1].get("intValue").asNumber, 2);
+				assert.equal(arraySqlData[2].get("intValue").asNumber, 3);
+			} finally {
+				db.dispose();
+			}
 		} finally {
-			db.dispose();
+			helper.stopHttpServer(httpServer);
 		}
 	});
 });
 
+namespace helper {
+	export function startHttpServer(bindContent: string): Promise<http.Server> {
+		return new Promise((resolve, reject) => {
+			const server = http.createServer(function (request, response) { response.end(bindContent); })
+				.on("listening", function () { resolve(server); })
+				.on("error", reject)
+				.listen(8080, "127.0.0.1");
+		});
+	}
+	export function stopHttpServer(server: http.Server) {
+		return new Promise((resolve) => {
+			server.close(() => { resolve(); });
+		});
+	}
+}

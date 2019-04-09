@@ -1,10 +1,14 @@
 import * as chai from "chai";
+import * as os from "os";
+import * as path from "path";
+import { URL, fileURLToPath, pathToFileURL } from "url";
+
 import { Factory, CancellationToken } from "@zxteam/contract";
+import { Financial } from "@zxteam/financial.js";
 import ensureFactory from "@zxteam/ensure.js";
-import { SqlProvider } from "@zxteam/contract.sql";
+import { SqlProvider, EmbeddedSqlProviderFactory } from "@zxteam/contract.sql";
 
 import * as lib from "../src";
-import { Financial } from "@zxteam/financial.js";
 
 declare global {
 	namespace Chai {
@@ -42,14 +46,21 @@ const DUMMY_CANCELLATION_TOKEN: CancellationToken = {
 	throwIfCancellationRequested(): void { /* STUB */ }
 };
 
-function getSQLiteUrl(): URL {
-	const fullPathDb = "file:///" + __dirname + "/.." + "/.tmp" + "/sqlite.db";
-	return new URL(fullPathDb);
+function getSQLiteUrltoDb(): URL {
+	const tmpDirectory = os.tmpdir();
+	const pathToDB = path.join(tmpDirectory, "sqlite.db");
+	const urlToDB = pathToFileURL(pathToDB);
+	return urlToDB;
+}
+function getSQLiteUrltoSqlFile(): URL {
+	const pathToSqlScript = path.join(__dirname, "general.test.sql");
+	const urlToDB = pathToFileURL(pathToSqlScript);
+	return urlToDB;
 }
 
 
 describe("SQLite Tests", function () {
-	let sqlProviderFactory: Factory<SqlProvider>;
+	let sqlProviderFactory: lib.SqliteProviderFactory;
 	let sqlProvider: SqlProvider | null;
 
 	function getSqlProvider(): SqlProvider {
@@ -72,7 +83,8 @@ describe("SQLite Tests", function () {
 		});
 		*/
 
-		sqlProviderFactory = new lib.SQLiteProviderFactory({ fullPathDb: getSQLiteUrl() });
+		sqlProviderFactory = new lib.SqliteProviderFactory(getSQLiteUrltoDb());
+		await sqlProviderFactory.newDatabase(DUMMY_CANCELLATION_TOKEN, getSQLiteUrltoSqlFile());
 	});
 
 	beforeEach(async function () {
