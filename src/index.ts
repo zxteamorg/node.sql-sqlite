@@ -590,7 +590,8 @@ namespace helpers {
 	export function sqlRun(instansDb: sqlite.Database, sql: string, params?: Array<any>): Promise<sqlite.RunResult> {
 		return new Promise((resolve, reject) => {
 			try {
-				instansDb.run(sql, params, function (error) {
+				const [friendlySql, friendlyParams] = unwrapSqlAndParams(sql, params);
+				instansDb.run(friendlySql, friendlyParams, function (error) {
 					if (error) {
 						return reject(error);
 					}
@@ -604,7 +605,8 @@ namespace helpers {
 	export function sqlFetch(instansDb: sqlite.Database, sql: string, params?: Array<any>): Promise<Array<any>> {
 		return new Promise((resolve, reject) => {
 			try {
-				instansDb.all(sql, params, (error, rows) => {
+				const [friendlySql, friendlyParams] = unwrapSqlAndParams(sql, params);
+				instansDb.all(friendlySql, friendlyParams, (error, rows) => {
 					if (error) {
 						return reject(error);
 					}
@@ -654,6 +656,35 @@ namespace helpers {
 			}
 		}
 	}
+	function unwrapSqlAndParams(sql: string, params?: Array<any>): [string, Array<any>] {
+		let finalSql = "";
+		let searchStart = 0;
+		let paramCount = 0;
+		const unwrappedParams: Array<any> = [];
+		while (true) {
+			const position = sql.indexOf("?", searchStart);
+			if (position === -1) {
+				finalSql += sql.substr(searchStart);
+				return [finalSql, unwrappedParams];
+			} else {
+				if (params === undefined) { break; }
+				if (paramCount >= params.length) { break; }
+				const param = params[paramCount];
+				if (Array.isArray(param)) {
+					finalSql += sql.substr(searchStart, position);
+					finalSql += param.map(() => "?").join(",");
+					unwrappedParams.push(...param);
+				} else {
+					finalSql += sql.substr(searchStart, position + 1);
+					unwrappedParams.push(param);
+				}
+				searchStart = position + 1;
+			}
+		}
+		throw new Error(`Cannot unwrap query: ${sql}`);
+
+	}
+
 	async function loadScriptAndParseScript(cancellationToken: CancellationToken, urlPath: URL): Promise<Array<string>> {
 		const sqlScriptContent = await loadScript(cancellationToken, urlPath);
 		const sqlCommands = parseCommands(sqlScriptContent);

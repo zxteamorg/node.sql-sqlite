@@ -21,3 +21,6 @@ src/**/*.map
 test/**/*.d.ts
 test/**/*.js
 test/**/*.map
+
+# Guest tests
+test/guest.test.*

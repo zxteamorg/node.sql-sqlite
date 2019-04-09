@@ -354,12 +354,12 @@ describe("SQLite Tests", function () {
 	});
 	it("Read with IN condition", async function () {
 		const result = await getSqlProvider()
-			.statement("SELECT \"varchar\" FROM \"tb_1\" WHERE \"int\" IN (?)")
+			.statement("SELECT \"varcharValue\" FROM \"tb_1\" WHERE \"intValue\" IN (?)")
 			.executeQuery(DUMMY_CANCELLATION_TOKEN, [1, 3]);
 		assert.isArray(result);
 		assert.equal(result.length, 2);
-		assert.equal(result[0].get("varchar").asString, "one");
-		assert.equal(result[1].get("varchar").asString, "three");
+		assert.equal(result[0].get("varcharValue").asString, "one");
+		assert.equal(result[1].get("varcharValue").asString, "three");
 	});
 	it.skip("Read two Result Sets via sp_multi_fetch", async function () {
 		const resultSets = await getSqlProvider()
