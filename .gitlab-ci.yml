@@ -17,17 +17,3 @@ test:
   script:
     - npm run test
     - npm run test
-    - npm run test
-    - npm run test
-    - npm run test
-    - npm run test
-    - npm run test
-    - npm run test
-    - npm run test
-    - npm run test
-    - npm run test
-    - npm run test
-    - npm run test
-    - npm run test
-    - npm run test
-    - npm run test

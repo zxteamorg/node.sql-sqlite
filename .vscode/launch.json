@@ -23,7 +23,6 @@
 			"cwd": "${workspaceRoot}",
 			"env": {
 				"NODE_ENV": "development",
-				"TEST_DB_URL": "sqlite://"
 			},
 			"console": "internalConsole",
 			"sourceMaps": true,

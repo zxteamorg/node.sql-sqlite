@@ -1,4 +1,5 @@
 import * as chai from "chai";
+import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { URL, fileURLToPath, pathToFileURL } from "url";
@@ -82,6 +83,11 @@ describe("SQLite Tests", function () {
 			}
 		});
 		*/
+
+		const pathTodb = fileURLToPath(getSQLiteUrltoDb());
+		if (fs.existsSync(pathTodb)) {
+			fs.unlinkSync(pathTodb);
+		}
 
 		sqlProviderFactory = new lib.SqliteProviderFactory(getSQLiteUrltoDb());
 		await sqlProviderFactory.newDatabase(DUMMY_CANCELLATION_TOKEN, getSQLiteUrltoSqlFile());
