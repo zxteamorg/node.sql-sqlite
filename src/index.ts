@@ -675,9 +675,10 @@ namespace helpers {
 					finalSql += param.map(() => "?").join(",");
 					unwrappedParams.push(...param);
 				} else {
-					finalSql += sql.substr(searchStart, position + 1);
+					finalSql += sql.substr(searchStart, ((position + 1) - searchStart));
 					unwrappedParams.push(param);
 				}
+				paramCount += 1;
 				searchStart = position + 1;
 			}
 		}

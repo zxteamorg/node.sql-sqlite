@@ -361,6 +361,23 @@ describe("SQLite Tests", function () {
 		assert.equal(result[0].get("varcharValue").asString, "one");
 		assert.equal(result[1].get("varcharValue").asString, "three");
 	});
+	it("Insert two variable to table tb_1 ", async function () {
+		await getSqlProvider()
+			.statement("INSERT INTO tb_1(varcharValue, intValue) VALUES (?, ?)")
+			.execute(DUMMY_CANCELLATION_TOKEN, "One hundred", 100);
+		await getSqlProvider()
+			.statement("INSERT INTO tb_1(varcharValue, intValue) VALUES (?, ?);")
+			.execute(DUMMY_CANCELLATION_TOKEN, "Two hundred", 200);
+
+		const result = await getSqlProvider()
+			.statement("SELECT \"varcharValue\", \"intValue\" FROM \"tb_1\" WHERE \"intValue\" IN (?,?)")
+			.executeQuery(DUMMY_CANCELLATION_TOKEN, 100, 200);
+
+		assert.isArray(result);
+		assert.equal(result.length, 2);
+		assert.equal(result[0].get("varcharValue").asString, "One hundred");
+		assert.equal(result[1].get("varcharValue").asString, "Two hundred");
+	});
 	it.skip("Read two Result Sets via sp_multi_fetch", async function () {
 		const resultSets = await getSqlProvider()
 			.statement("CALL sp_multi_fetch()")
