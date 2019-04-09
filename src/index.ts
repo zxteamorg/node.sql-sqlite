@@ -7,7 +7,7 @@ import { Task, WrapError } from "ptask.js";
 import * as sqlite from "sqlite3";
 import * as fs from "fs";
 import { promisify } from "util";
-import { URL, fileURLToPath } from "url";
+import { URL, fileURLToPath, pathToFileURL } from "url";
 
 import * as contract from "@zxteam/contract.sql";
 
@@ -35,7 +35,8 @@ export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactor
 			if (this._logger.isTraceEnabled) {
 				this._logger.trace(`Checking a database file  ${this._url} for existent`);
 			}
-			const isDatabaseFileExists = await existsAsync(this._url);
+			const dbPath = fileURLToPath(this._url);
+			const isDatabaseFileExists = await existsAsync(dbPath);
 
 			this._logger.trace("Check cancellationToken for interrupt");
 			ct.throwIfCancellationRequested();
@@ -73,6 +74,13 @@ export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactor
 		}, cancellationToken);
 	}
 
+	public isDatabaseExists(cancellationToken: CancellationToken): Task<boolean> {
+		return Task.run(() => { // scope
+			const dbPath = fileURLToPath(this._url);
+			return existsAsync(dbPath);
+		});
+	}
+
 	public newDatabase(cancellationToken: CancellationToken, initScriptUrl?: URL): Task<void> {
 		return Task.run(async () => {
 			this._logger.trace("Inside newDatabase()");
@@ -82,7 +90,8 @@ export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactor
 			}
 
 			{ // scope
-				const isExist = await existsAsync(this._url);
+				const dbPath = fileURLToPath(this._url);
+				const isExist = await existsAsync(dbPath);
 				if (isExist) {
 					if (this._logger.isTraceEnabled) {
 						this._logger.trace(`The file ${this._url} already exists. Raise an exception about this problem`);
@@ -113,7 +122,8 @@ export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactor
 
 			this._logger.trace("Double check that DB file was created");
 			{ // scope
-				const isExist = await existsAsync(this._url);
+				const dbPath = fileURLToPath(this._url);
+				const isExist = await existsAsync(dbPath);
 				if (!isExist) {
 					if (this._logger.isTraceEnabled) {
 						this._logger.trace(`Something went wrong. The DB file ${this._url} still not exists after Open/Close SQLite.`);
