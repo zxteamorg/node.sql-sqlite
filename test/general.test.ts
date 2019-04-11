@@ -407,5 +407,13 @@ describe("SQLite Tests", function () {
 			assert.equal(secondResultSet[1].get("last_name").asString, "Zghama");
 		}
 	});
+	it("Read result through executeQuery (SELECT) WHERE IN many", async function () {
+		const resultArray = await getSqlProvider()
+			.statement("SELECT * FROM \"tb_1\" WHERE intValue IN (?)")
+			.executeQuery(DUMMY_CANCELLATION_TOKEN, [1, 2, 3]);
+
+		assert.instanceOf(resultArray, Array);
+		assert.equal(resultArray.length, 3);
+	});
 });
 
