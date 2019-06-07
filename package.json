@@ -1,15 +1,20 @@
 {
 	"name": "@zxteam/sql.sqlite",
-	"version": "0.0.9",
+	"version": "5.0.0",
 	"description": "ZXTeam's SQL implementation for SQLite",
 	"main": "./src/index.js",
 	"types": "./src/index.d.ts",
 	"author": {
-		"name": "Maxim Anurin",
-		"email": "maxim.anurin@zxteam.org",
-		"url": "http://www.anurin.name"
+		"name": "ZXTeam",
+		"email": "pub@project.zxteam.org",
+		"url": "http://www.zxteam.org"
 	},
 	"contributors": [
+		{
+			"name": "Maxim Anurin",
+			"email": "maxim.anurin@zxteam.org",
+			"url": "http://www.anurin.name"
+		},
 		{
 			"name": "Serhii Zghama",
 			"email": "serhii.zghama@zxteam.org"
@@ -19,17 +24,17 @@
 	"devDependencies": {
 		"@types/chai-datetime": "^0.0.31",
 		"@types/sqlite3": "^3.1.5",
-		"@zxnode/build": "^0.0.33",
+		"@zxnode/build": "^0.0.34",
 		"@zxteam/ensure.js": "^1.2.0",
 		"chai-datetime": "^1.5.0"
 	},
 	"dependencies": {
-		"@zxteam/contract": "^3.2.4",
-		"@zxteam/contract.sql": "^3.2.6",
-		"@zxteam/disposable": "^3.2.2",
-		"@zxteam/financial.js": "^3.2.1",
-		"@zxteam/webclient": "3.2.1",
-		"ptask.js": "^3.2.1",
+		"@zxteam/contract": "^5.0.0",
+		"@zxteam/contract.sql": "^5.0.0",
+		"@zxteam/disposable": "^4.0.2",
+		"@zxteam/financial.js": "^5.0.5",
+		"@zxteam/task": "^4.0.0",
+		"@zxteam/webclient": "^4.0.0",
 		"sqlite3": "^4.0.6"
 	},
 	"keywords": [

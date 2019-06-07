@@ -1,9 +1,9 @@
 
-import { Logger, CancellationToken, Task as TaskLike, Financial as FinancialLike } from "@zxteam/contract";
+import * as zxteam from "@zxteam/contract";
 import { Disposable, Initable } from "@zxteam/disposable";
-import { financial, Financial } from "@zxteam/financial.js";
+import { financial } from "@zxteam/financial.js";
 import { WebClient } from "@zxteam/webclient";
-import { Task, WrapError } from "ptask.js";
+import { Task as TaskImpl } from "@zxteam/task";
 import * as sqlite from "sqlite3";
 import * as fs from "fs";
 import { promisify } from "util";
@@ -17,19 +17,19 @@ const readFileAsync = promisify(fs.readFile);
 const FINACIAL_NUMBER_DEFAULT_FRACTION = 12;
 
 export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactory {
-	private readonly _logger: Logger;
+	private readonly _logger: zxteam.Logger;
 	private readonly _url: URL;
 
 	// This implemenation wrap package https://www.npmjs.com/package/sqlite3
-	public constructor(url: URL, logger?: Logger) {
+	public constructor(url: URL, logger?: zxteam.Logger) {
 		this._logger = logger || new DummyLogger();
 		this._url = url;
 
 		this._logger.trace("SqliteProviderFactory Constructed");
 	}
 
-	public create(cancellationToken?: CancellationToken): Task<contract.SqlProvider> {
-		return Task.run(async (ct) => {
+	public create(cancellationToken?: zxteam.CancellationToken): zxteam.Task<contract.SqlProvider> {
+		return TaskImpl.run(async (ct) => {
 			this._logger.trace("Inside create() ...");
 
 			if (this._logger.isTraceEnabled) {
@@ -74,15 +74,15 @@ export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactor
 		}, cancellationToken);
 	}
 
-	public isDatabaseExists(cancellationToken: CancellationToken): Task<boolean> {
-		return Task.run(() => { // scope
+	public isDatabaseExists(cancellationToken: zxteam.CancellationToken): zxteam.Task<boolean> {
+		return TaskImpl.run(() => { // scope
 			const dbPath = fileURLToPath(this._url);
 			return existsAsync(dbPath);
 		});
 	}
 
-	public newDatabase(cancellationToken: CancellationToken, initScriptUrl?: URL): Task<void> {
-		return Task.run(async () => {
+	public newDatabase(cancellationToken: zxteam.CancellationToken, initScriptUrl?: URL): zxteam.Task<void> {
+		return TaskImpl.run(async () => {
 			this._logger.trace("Inside newDatabase()");
 
 			if (this._logger.isTraceEnabled) {
@@ -142,9 +142,9 @@ class InvalidOperationError extends Error { }
 
 class SQLiteProvider extends Disposable implements contract.SqlProvider {
 	public readonly sqliteConnection: sqlite.Database;
-	private readonly _log: Logger;
+	private readonly _log: zxteam.Logger;
 	private readonly _disposer: () => Promise<void>;
-	public constructor(sqliteConnection: sqlite.Database, disposer: () => Promise<void>, log: Logger) {
+	public constructor(sqliteConnection: sqlite.Database, disposer: () => Promise<void>, log: zxteam.Logger) {
 		super();
 		this.sqliteConnection = sqliteConnection;
 		this._disposer = disposer;
@@ -160,8 +160,8 @@ class SQLiteProvider extends Disposable implements contract.SqlProvider {
 	}
 
 	// tslint:disable-next-line:max-line-length
-	public createTempTable(cancellationToken: CancellationToken, tableName: string, columnsDefinitions: string): TaskLike<contract.SqlTemporaryTable> {
-		return Task.run(async (ct) => {
+	public createTempTable(cancellationToken: zxteam.CancellationToken, tableName: string, columnsDefinitions: string): zxteam.Task<contract.SqlTemporaryTable> {
+		return TaskImpl.run(async (ct) => {
 			const tempTable = new SQLiteTempTable(this, ct, tableName, columnsDefinitions);
 			await tempTable.init();
 			return tempTable;
@@ -180,19 +180,19 @@ class SQLiteProvider extends Disposable implements contract.SqlProvider {
 }
 
 class SQLiteStatement implements contract.SqlStatement {
-	private readonly _log: Logger;
+	private readonly _log: zxteam.Logger;
 	private readonly _sqlText: string;
 	private readonly _owner: SQLiteProvider;
 
-	public constructor(owner: SQLiteProvider, sql: string, logger: Logger) {
+	public constructor(owner: SQLiteProvider, sql: string, logger: zxteam.Logger) {
 		this._owner = owner;
 		this._sqlText = sql;
 		this._log = logger;
 		this._log.trace("SQLiteStatement constructed");
 	}
 
-	public execute(cancellationToken: CancellationToken, ...values: Array<contract.SqlStatementParam>): Task<void> {
-		return Task.run(async () => {
+	public execute(cancellationToken: zxteam.CancellationToken, ...values: Array<contract.SqlStatementParam>): zxteam.Task<void> {
+		return TaskImpl.run(async () => {
 			if (this._log.isTraceEnabled) {
 				this._log.trace("Executing Query:", this._sqlText, values);
 			}
@@ -211,10 +211,10 @@ class SQLiteStatement implements contract.SqlStatement {
 	}
 
 	public executeQuery(
-		cancellationToken: CancellationToken,
+		cancellationToken: zxteam.CancellationToken,
 		...values: Array<contract.SqlStatementParam>
-	): Task<Array<contract.SqlResultRecord>> {
-		return Task.run(async (ct: CancellationToken) => {
+	): zxteam.Task<Array<contract.SqlResultRecord>> {
+		return TaskImpl.run(async (ct: zxteam.CancellationToken) => {
 			if (this._log.isTraceEnabled) {
 				this._log.trace("Executing Query:", this._sqlText, values);
 			}
@@ -243,8 +243,8 @@ class SQLiteStatement implements contract.SqlStatement {
 	}
 
 	// tslint:disable-next-line: max-line-length
-	public executeQueryMultiSets(cancellationToken: CancellationToken, ...values: Array<contract.SqlStatementParam>): Task<Array<Array<contract.SqlResultRecord>>> {
-		return Task.run((ct: CancellationToken) => {
+	public executeQueryMultiSets(cancellationToken: zxteam.CancellationToken, ...values: Array<contract.SqlStatementParam>): zxteam.Task<Array<Array<contract.SqlResultRecord>>> {
+		return TaskImpl.run((ct: zxteam.CancellationToken) => {
 			if (this._log.isTraceEnabled) {
 				this._log.trace("Method executeQueryMultiSets not supported. Raise an exception.");
 			}
@@ -252,8 +252,11 @@ class SQLiteStatement implements contract.SqlStatement {
 		}, cancellationToken);
 	}
 
-	public executeScalar(cancellationToken: CancellationToken, ...values: Array<contract.SqlStatementParam>): Task<contract.SqlData> {
-		return Task.run(async (ct: CancellationToken) => {
+	public executeScalar(
+		cancellationToken: zxteam.CancellationToken,
+		...values: Array<contract.SqlStatementParam>
+	): zxteam.Task<contract.SqlData> {
+		return TaskImpl.run(async (ct: zxteam.CancellationToken) => {
 			if (this._log.isTraceEnabled) {
 				this._log.trace("Executing Scalar:", this._sqlText, values);
 			}
@@ -347,11 +350,11 @@ class SQLiteSqlResultRecord implements contract.SqlResultRecord {
 class SQLiteTempTable extends Initable implements contract.SqlTemporaryTable {
 
 	private readonly _owner: SQLiteProvider;
-	private readonly _cancellationToken: CancellationToken;
+	private readonly _cancellationToken: zxteam.CancellationToken;
 	private readonly _tableName: string;
 	private readonly _columnsDefinitions: string;
 
-	public constructor(owner: SQLiteProvider, cancellationToken: CancellationToken, tableName: string, columnsDefinitions: string) {
+	public constructor(owner: SQLiteProvider, cancellationToken: zxteam.CancellationToken, tableName: string, columnsDefinitions: string) {
 		super();
 		this._owner = owner;
 		this._cancellationToken = cancellationToken;
@@ -359,13 +362,13 @@ class SQLiteTempTable extends Initable implements contract.SqlTemporaryTable {
 		this._columnsDefinitions = columnsDefinitions;
 	}
 
-	public bulkInsert(cancellationToken: CancellationToken, bulkValues: Array<Array<contract.SqlStatementParam>>): TaskLike<void> {
+	public bulkInsert(cancellationToken: zxteam.CancellationToken, bulkValues: Array<Array<contract.SqlStatementParam>>): zxteam.Task<void> {
 		return this._owner.statement(`INSERT INTO temp.${this._tableName}`).execute(cancellationToken, bulkValues as any);
 	}
-	public crear(cancellationToken: CancellationToken): TaskLike<void> {
+	public crear(cancellationToken: zxteam.CancellationToken): zxteam.Task<void> {
 		return this._owner.statement(`DELETE FROM temp.${this._tableName}`).execute(cancellationToken);
 	}
-	public insert(cancellationToken: CancellationToken, values: Array<contract.SqlStatementParam>): Task<void> {
+	public insert(cancellationToken: zxteam.CancellationToken, values: Array<contract.SqlStatementParam>): zxteam.Task<void> {
 		return this._owner.statement(`INSERT INTO temp.${this._tableName}`).execute(cancellationToken, ...values);
 	}
 
@@ -460,24 +463,24 @@ class SQLiteData implements contract.SqlData {
 			throw new InvalidOperationError(this.formatWrongDataTypeMessage());
 		}
 	}
-	public get asFinancial(): FinancialLike {
+	public get asFinancial(): zxteam.Financial {
 		if (this._sqliteValue === null) {
 			throw new InvalidOperationError(this.formatWrongDataTypeMessage());
 		} else if (typeof this._sqliteValue === "number") {
-			return financial(this._sqliteValue, FINACIAL_NUMBER_DEFAULT_FRACTION);
+			return financial.fromFloat(this._sqliteValue, FINACIAL_NUMBER_DEFAULT_FRACTION);
 		} else if (typeof this._sqliteValue === "string") {
-			return financial(this._sqliteValue);
+			return financial.parse(this._sqliteValue);
 		} else {
 			throw new InvalidOperationError(this.formatWrongDataTypeMessage());
 		}
 	}
-	public get asNullableFinancial(): FinancialLike | null {
+	public get asNullableFinancial(): zxteam.Financial | null {
 		if (this._sqliteValue === null) {
 			return null;
 		} else if (typeof this._sqliteValue === "number") {
-			return financial(this._sqliteValue, FINACIAL_NUMBER_DEFAULT_FRACTION);
+			return financial.fromFloat(this._sqliteValue, FINACIAL_NUMBER_DEFAULT_FRACTION);
 		} else if (typeof this._sqliteValue === "string") {
-			return financial(this._sqliteValue);
+			return financial.parse(this._sqliteValue);
 		} else {
 			throw new InvalidOperationError(this.formatWrongDataTypeMessage());
 		}
@@ -540,7 +543,7 @@ class SQLiteData implements contract.SqlData {
 	}
 }
 
-class DummyLogger implements Logger {
+class DummyLogger implements zxteam.Logger {
 	public get isTraceEnabled(): boolean { return false; }
 	public get isDebugEnabled(): boolean { return false; }
 	public get isInfoEnabled(): boolean { return false; }
@@ -620,15 +623,15 @@ namespace helpers {
 	export function statementArgumentsAdapter(args: Array<contract.SqlStatementParam>): Array<any> {
 		return args.map(value => {
 			if (typeof value === "object") {
-				if (value !== null && Financial.isFinancialLike(value)) {
-					return Financial.toString(value); // Financial should be converted to string (SQLite know nothing about)
+				if (value !== null && financial.isFinancial(value)) {
+					return financial.toString(value); // Financial should be converted to string (SQLite know nothing about)
 				}
 			}
 			return value;
 		});
 	}
 	export async function initalizeDatabaseByScript(
-		cancellationToken: CancellationToken, initScriptUrl: URL, db: sqlite.Database, logger: Logger
+		cancellationToken: zxteam.CancellationToken, initScriptUrl: URL, db: sqlite.Database, logger: zxteam.Logger
 	) {
 		if (initScriptUrl !== undefined) {
 			logger.trace("Loading script...");
@@ -686,12 +689,12 @@ namespace helpers {
 
 	}
 
-	async function loadScriptAndParseScript(cancellationToken: CancellationToken, urlPath: URL): Promise<Array<string>> {
+	async function loadScriptAndParseScript(cancellationToken: zxteam.CancellationToken, urlPath: URL): Promise<Array<string>> {
 		const sqlScriptContent = await loadScript(cancellationToken, urlPath);
 		const sqlCommands = parseCommands(sqlScriptContent);
 		return sqlCommands;
 	}
-	function loadScript(cancellationToken: CancellationToken, urlPath: URL): Promise<string> {
+	function loadScript(cancellationToken: zxteam.CancellationToken, urlPath: URL): Promise<string> {
 		if (urlPath.protocol === "file:") {
 			const initScriptPath = fileURLToPath(urlPath);
 			return loadScriptFromFile(cancellationToken, initScriptPath);
@@ -700,12 +703,12 @@ namespace helpers {
 		}
 		throw new Error(`Do not support this protocol: ${urlPath.protocol}`);
 	}
-	async function loadScriptFromFile(cancellationToken: CancellationToken, filename: string): Promise<string> {
+	async function loadScriptFromFile(cancellationToken: zxteam.CancellationToken, filename: string): Promise<string> {
 		return readFileAsync(filename, "utf8");
 	}
-	async function loadScriptFromHttp(cancellationToken: CancellationToken, urlPath: URL): Promise<string> {
+	async function loadScriptFromHttp(cancellationToken: zxteam.CancellationToken, urlPath: URL): Promise<string> {
 		const webClient = new WebClient();
-		const invokeResponse = await webClient.invoke(cancellationToken, { url: urlPath, method: "GET" });
+		const invokeResponse = await webClient.invoke(cancellationToken, { url: urlPath, method: "GET" }).promise;
 
 		if (invokeResponse.statusCode !== 200) {
 			throw new Error(`Cannot read remote SQL script. Unsuccessful operation code status ${invokeResponse.statusCode}`);

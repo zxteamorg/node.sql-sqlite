@@ -23,7 +23,7 @@
 			"cwd": "${workspaceRoot}",
 			"env": {
 				"NODE_ENV": "development",
-				"TEST_DB_URL": "file:///tmp/emptytest.db"
+				"TEST_DB_URL": "file://${workspaceRoot}/.tmp/emptytest.db"
 			},
 			"console": "internalConsole",
 			"sourceMaps": true,

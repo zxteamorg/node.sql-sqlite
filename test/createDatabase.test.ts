@@ -59,12 +59,12 @@ describe("SQLite Create Database", function () {
 	it("Create database", async function () {
 		const sqlProviderFactory = new lib.SqliteProviderFactory(getSQLiteUrltoDb());
 		await sqlProviderFactory.newDatabase(DUMMY_CANCELLATION_TOKEN);
-		const db = await sqlProviderFactory.create();
+		const db = await sqlProviderFactory.create().promise;
 		try {
-			const sqlData = await db.statement("SELECT 1;").executeScalar(DUMMY_CANCELLATION_TOKEN);
+			const sqlData = await db.statement("SELECT 1;").executeScalar(DUMMY_CANCELLATION_TOKEN).promise;
 			assert.equal(sqlData.asNumber, 1);
 		} finally {
-			db.dispose();
+			await db.dispose().promise;
 		}
 	});
 	it("Cannot open database because do not exist", async function () {
@@ -80,9 +80,9 @@ describe("SQLite Create Database", function () {
 	it("Create database and run file init script", async function () {
 		const sqlProviderFactory = new lib.SqliteProviderFactory(getSQLiteUrltoDb());
 		await sqlProviderFactory.newDatabase(DUMMY_CANCELLATION_TOKEN, getSQLiteUrltoSqlFile());
-		const db = await sqlProviderFactory.create();
+		const db = await sqlProviderFactory.create().promise;
 		try {
-			const arraySqlData = await db.statement("SELECT varcharValue, intValue FROM 'tb_1';").executeQuery(DUMMY_CANCELLATION_TOKEN);
+			const arraySqlData = await db.statement("SELECT varcharValue, intValue FROM 'tb_1';").executeQuery(DUMMY_CANCELLATION_TOKEN).promise;
 			assert.equal(arraySqlData[0].get("varcharValue").asString, "one");
 			assert.equal(arraySqlData[1].get("varcharValue").asString, "two");
 			assert.equal(arraySqlData[2].get("varcharValue").asString, "three");
@@ -91,7 +91,7 @@ describe("SQLite Create Database", function () {
 			assert.equal(arraySqlData[1].get("intValue").asNumber, 2);
 			assert.equal(arraySqlData[2].get("intValue").asNumber, 3);
 		} finally {
-			db.dispose();
+			await db.dispose().promise;
 		}
 	});
 	it("Create database and run href init script", async function () {
@@ -100,10 +100,11 @@ describe("SQLite Create Database", function () {
 		const httpServer = await helper.startHttpServer(scriptContent);
 		try {
 			const sqlProviderFactory = new lib.SqliteProviderFactory(getSQLiteUrltoDb());
-			await sqlProviderFactory.newDatabase(DUMMY_CANCELLATION_TOKEN, getSQLiteUrltoSqlHref());
-			const db = await sqlProviderFactory.create();
+			await sqlProviderFactory.newDatabase(DUMMY_CANCELLATION_TOKEN, getSQLiteUrltoSqlHref()).promise;
+			const db = await sqlProviderFactory.create().promise;
 			try {
-				const arraySqlData = await db.statement("SELECT varcharValue, intValue FROM 'tb_1';").executeQuery(DUMMY_CANCELLATION_TOKEN);
+				const arraySqlData = await db.statement("SELECT varcharValue, intValue FROM 'tb_1';")
+					.executeQuery(DUMMY_CANCELLATION_TOKEN).promise;
 				assert.equal(arraySqlData[0].get("varcharValue").asString, "one");
 				assert.equal(arraySqlData[1].get("varcharValue").asString, "two");
 				assert.equal(arraySqlData[2].get("varcharValue").asString, "three");
@@ -112,7 +113,7 @@ describe("SQLite Create Database", function () {
 				assert.equal(arraySqlData[1].get("intValue").asNumber, 2);
 				assert.equal(arraySqlData[2].get("intValue").asNumber, 3);
 			} finally {
-				db.dispose();
+				await db.dispose().promise;
 			}
 		} finally {
 			helper.stopHttpServer(httpServer);
