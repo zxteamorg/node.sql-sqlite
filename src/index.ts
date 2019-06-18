@@ -141,6 +141,7 @@ class ArgumentError extends Error { }
 class InvalidOperationError extends Error { }
 
 class SQLiteProvider extends Disposable implements contract.SqlProvider {
+	public readonly dialect: contract.SqlDialect = contract.SqlDialect.SQLite;
 	public readonly sqliteConnection: sqlite.Database;
 	private readonly _log: zxteam.Logger;
 	private readonly _disposer: () => Promise<void>;
