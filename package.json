@@ -1,6 +1,6 @@
 {
 	"name": "@zxteam/sql.sqlite",
-	"version": "5.0.1",
+	"version": "6.0.2",
 	"description": "ZXTeam's SQL implementation for SQLite",
 	"main": "./src/index.js",
 	"types": "./src/index.d.ts",
@@ -25,16 +25,16 @@
 		"@types/chai-datetime": "^0.0.32",
 		"@types/sqlite3": "^3.1.5",
 		"@zxnode/build": "^0.0.34",
-		"@zxteam/ensure.js": "^5.0.1",
 		"chai-datetime": "^1.5.0"
 	},
 	"dependencies": {
-		"@zxteam/contract": "^5.0.1",
-		"@zxteam/contract.sql": "^5.0.1",
-		"@zxteam/disposable": "^5.0.2",
-		"@zxteam/financial.js": "^5.0.5",
-		"@zxteam/task": "^5.0.1",
-		"@zxteam/webclient": "^5.0.1",
+		"@zxteam/contract": "^6.0.2",
+		"@zxteam/contract.sql": "^6.0.2",
+		"@zxteam/disposable": "^6.0.1",
+		"@zxteam/ensure.js": "^6.0.2",
+		"@zxteam/financial.js": "^6.0.1",
+		"@zxteam/task": "^6.0.1",
+		"@zxteam/webclient": "^6.0.1",
 		"sqlite3": "^4.0.9"
 	},
 	"keywords": [

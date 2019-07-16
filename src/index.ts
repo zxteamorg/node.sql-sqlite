@@ -3,7 +3,7 @@ import * as zxteam from "@zxteam/contract";
 import { Disposable, Initable } from "@zxteam/disposable";
 import { financial } from "@zxteam/financial.js";
 import { WebClient } from "@zxteam/webclient";
-import { Task as TaskImpl } from "@zxteam/task";
+import { DUMMY_CANCELLATION_TOKEN } from "@zxteam/task";
 import * as sqlite from "sqlite3";
 import * as fs from "fs";
 import { promisify } from "util";
@@ -28,110 +28,104 @@ export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactor
 		this._logger.trace("SqliteProviderFactory Constructed");
 	}
 
-	public create(cancellationToken?: zxteam.CancellationToken): zxteam.Task<contract.SqlProvider> {
-		return TaskImpl.run(async (ct) => {
-			this._logger.trace("Inside create() ...");
+	public async create(cancellationToken: zxteam.CancellationToken): Promise<contract.SqlProvider> {
+		this._logger.trace("Inside create() ...");
 
+		if (this._logger.isTraceEnabled) {
+			this._logger.trace(`Checking a database file  ${this._url} for existent`);
+		}
+		const dbPath = fileURLToPath(this._url);
+		const isDatabaseFileExists = await existsAsync(dbPath);
+
+		this._logger.trace("Check cancellationToken for interrupt");
+		cancellationToken.throwIfCancellationRequested();
+
+		if (!isDatabaseFileExists) {
 			if (this._logger.isTraceEnabled) {
-				this._logger.trace(`Checking a database file  ${this._url} for existent`);
+				this._logger.trace(`The database file ${this._url} was not found. Raise exception...`);
 			}
-			const dbPath = fileURLToPath(this._url);
-			const isDatabaseFileExists = await existsAsync(dbPath);
+			throw new Error(`The database file ${this._url} was not found`);
+		}
 
-			this._logger.trace("Check cancellationToken for interrupt");
-			ct.throwIfCancellationRequested();
-
-			if (!isDatabaseFileExists) {
-				if (this._logger.isTraceEnabled) {
-					this._logger.trace(`The database file ${this._url} was not found. Raise exception...`);
-				}
-				throw new Error(`The database file ${this._url} was not found`);
-			}
-
-			if (this._logger.isTraceEnabled) {
-				this._logger.trace(`Opening the database file  ${this._url}`);
-			}
-			const underlayingSqliteConnection = await helpers.openDatabase(this._url);
-			try {
-				this._logger.trace("Check cancellationToken for interrupt");
-				ct.throwIfCancellationRequested();
-
-				const sqlProvider: contract.SqlProvider = new SQLiteProvider(
-					underlayingSqliteConnection,
-					() => helpers.closeDatabase(underlayingSqliteConnection),
-					this._logger
-				);
-
-				if (this._logger.isTraceEnabled) {
-					this._logger.trace(`The database file  ${this._url} was opened successfully`);
-				}
-
-				return sqlProvider;
-			} catch (e) {
-				await helpers.closeDatabase(underlayingSqliteConnection);
-				throw e;
-			}
-		}, cancellationToken);
-	}
-
-	public isDatabaseExists(cancellationToken: zxteam.CancellationToken): zxteam.Task<boolean> {
-		return TaskImpl.run(() => { // scope
-			const dbPath = fileURLToPath(this._url);
-			return existsAsync(dbPath);
-		});
-	}
-
-	public newDatabase(cancellationToken: zxteam.CancellationToken, initScriptUrl?: URL): zxteam.Task<void> {
-		return TaskImpl.run(async () => {
-			this._logger.trace("Inside newDatabase()");
-
-			if (this._logger.isTraceEnabled) {
-				this._logger.trace(`Check is file ${this._url} exists`);
-			}
-
-			{ // scope
-				const dbPath = fileURLToPath(this._url);
-				const isExist = await existsAsync(dbPath);
-				if (isExist) {
-					if (this._logger.isTraceEnabled) {
-						this._logger.trace(`The file ${this._url} already exists. Raise an exception about this problem`);
-					}
-					throw new Error(`Cannot create new database due the file ${this._url} already exists`);
-				}
-			}
-
+		if (this._logger.isTraceEnabled) {
+			this._logger.trace(`Opening the database file  ${this._url}`);
+		}
+		const underlayingSqliteConnection = await helpers.openDatabase(this._url);
+		try {
 			this._logger.trace("Check cancellationToken for interrupt");
 			cancellationToken.throwIfCancellationRequested();
 
-			this._logger.trace("Open SQLite database for non-exsting file");
-			const db = await helpers.openDatabase(this._url);
-			try {
-				if (initScriptUrl !== undefined) {
-					this._logger.trace("initScriptUrl is presented. Let's go to initalizeDatabaseByScript()");
-					await helpers.initalizeDatabaseByScript(cancellationToken, initScriptUrl, db, this._logger);
-				} else {
-					this._logger.trace("initScriptUrl is NOT presented");
-				}
-			} finally {
-				this._logger.trace("Close SQLite database");
-				await helpers.closeDatabase(db);
+			const sqlProvider: contract.SqlProvider = new SQLiteProvider(
+				underlayingSqliteConnection,
+				() => helpers.closeDatabase(underlayingSqliteConnection),
+				this._logger
+			);
+
+			if (this._logger.isTraceEnabled) {
+				this._logger.trace(`The database file  ${this._url} was opened successfully`);
 			}
 
-			this._logger.trace("Check cancellationToken for interrupt");
-			cancellationToken.throwIfCancellationRequested();
+			return sqlProvider;
+		} catch (e) {
+			await helpers.closeDatabase(underlayingSqliteConnection);
+			throw e;
+		}
+	}
 
-			this._logger.trace("Double check that DB file was created");
-			{ // scope
-				const dbPath = fileURLToPath(this._url);
-				const isExist = await existsAsync(dbPath);
-				if (!isExist) {
-					if (this._logger.isTraceEnabled) {
-						this._logger.trace(`Something went wrong. The DB file ${this._url} still not exists after Open/Close SQLite.`);
-					}
-					throw new Error("Underlaying library SQLite did not create DB file.");
+	public isDatabaseExists(cancellationToken: zxteam.CancellationToken): Promise<boolean> {
+		const dbPath = fileURLToPath(this._url);
+		return existsAsync(dbPath);
+	}
+
+	public async newDatabase(cancellationToken: zxteam.CancellationToken, initScriptUrl?: URL): Promise<void> {
+		this._logger.trace("Inside newDatabase()");
+
+		if (this._logger.isTraceEnabled) {
+			this._logger.trace(`Check is file ${this._url} exists`);
+		}
+
+		{ // scope
+			const dbPath = fileURLToPath(this._url);
+			const isExist = await existsAsync(dbPath);
+			if (isExist) {
+				if (this._logger.isTraceEnabled) {
+					this._logger.trace(`The file ${this._url} already exists. Raise an exception about this problem`);
 				}
+				throw new Error(`Cannot create new database due the file ${this._url} already exists`);
 			}
-		});
+		}
+
+		this._logger.trace("Check cancellationToken for interrupt");
+		cancellationToken.throwIfCancellationRequested();
+
+		this._logger.trace("Open SQLite database for non-exsting file");
+		const db = await helpers.openDatabase(this._url);
+		try {
+			if (initScriptUrl !== undefined) {
+				this._logger.trace("initScriptUrl is presented. Let's go to initalizeDatabaseByScript()");
+				await helpers.initalizeDatabaseByScript(cancellationToken, initScriptUrl, db, this._logger);
+			} else {
+				this._logger.trace("initScriptUrl is NOT presented");
+			}
+		} finally {
+			this._logger.trace("Close SQLite database");
+			await helpers.closeDatabase(db);
+		}
+
+		this._logger.trace("Check cancellationToken for interrupt");
+		cancellationToken.throwIfCancellationRequested();
+
+		this._logger.trace("Double check that DB file was created");
+		{ // scope
+			const dbPath = fileURLToPath(this._url);
+			const isExist = await existsAsync(dbPath);
+			if (!isExist) {
+				if (this._logger.isTraceEnabled) {
+					this._logger.trace(`Something went wrong. The DB file ${this._url} still not exists after Open/Close SQLite.`);
+				}
+				throw new Error("Underlaying library SQLite did not create DB file.");
+			}
+		}
 	}
 }
 
@@ -160,13 +154,12 @@ class SQLiteProvider extends Disposable implements contract.SqlProvider {
 		return new SQLiteStatement(this, sql, this._log);
 	}
 
-	// tslint:disable-next-line:max-line-length
-	public createTempTable(cancellationToken: zxteam.CancellationToken, tableName: string, columnsDefinitions: string): zxteam.Task<contract.SqlTemporaryTable> {
-		return TaskImpl.run(async (ct) => {
-			const tempTable = new SQLiteTempTable(this, ct, tableName, columnsDefinitions);
-			await tempTable.init();
-			return tempTable;
-		}, cancellationToken || undefined);
+	public async createTempTable(
+		cancellationToken: zxteam.CancellationToken, tableName: string, columnsDefinitions: string
+	): Promise<contract.SqlTemporaryTable> {
+		const tempTable = new SQLiteTempTable(this, tableName, columnsDefinitions);
+		await tempTable.init(cancellationToken);
+		return tempTable;
 	}
 
 	public verifyNotDisposed(): void {
@@ -192,107 +185,102 @@ class SQLiteStatement implements contract.SqlStatement {
 		this._log.trace("SQLiteStatement constructed");
 	}
 
-	public execute(cancellationToken: zxteam.CancellationToken, ...values: Array<contract.SqlStatementParam>): zxteam.Task<void> {
-		return TaskImpl.run(async () => {
-			if (this._log.isTraceEnabled) {
-				this._log.trace("Executing Query:", this._sqlText, values);
-			}
+	public async execute(cancellationToken: zxteam.CancellationToken, ...values: Array<contract.SqlStatementParam>): Promise<void> {
+		if (this._log.isTraceEnabled) {
+			this._log.trace("Executing Query:", this._sqlText, values);
+		}
 
-			this._owner.verifyNotDisposed();
-			const underlyingResult = await helpers.sqlRun(
-				this._owner.sqliteConnection,
-				this._sqlText,
-				helpers.statementArgumentsAdapter(values)
-			);
+		this._owner.verifyNotDisposed();
+		const underlyingResult = await helpers.sqlRun(
+			this._owner.sqliteConnection,
+			this._sqlText,
+			helpers.statementArgumentsAdapter(values)
+		);
 
-			if (this._log.isTraceEnabled) {
-				this._log.trace("Executed Scalar:", underlyingResult);
-			}
-		}, cancellationToken);
+		if (this._log.isTraceEnabled) {
+			this._log.trace("Executed Scalar:", underlyingResult);
+		}
 	}
 
-	public executeQuery(
+	public async executeQuery(
 		cancellationToken: zxteam.CancellationToken,
 		...values: Array<contract.SqlStatementParam>
-	): zxteam.Task<Array<contract.SqlResultRecord>> {
-		return TaskImpl.run(async (ct: zxteam.CancellationToken) => {
-			if (this._log.isTraceEnabled) {
-				this._log.trace("Executing Query:", this._sqlText, values);
-			}
-			const underlyingResult = await helpers.sqlFetch(
-				this._owner.sqliteConnection,
-				this._sqlText,
-				helpers.statementArgumentsAdapter(values)
-			);
+	): Promise<ReadonlyArray<contract.SqlResultRecord>> {
+		if (this._log.isTraceEnabled) {
+			this._log.trace("Executing Query:", this._sqlText, values);
+		}
+		const underlyingResult = await helpers.sqlFetch(
+			this._owner.sqliteConnection,
+			this._sqlText,
+			helpers.statementArgumentsAdapter(values)
+		);
 
-			this._log.trace("Check cancellationToken for interrupt");
-			ct.throwIfCancellationRequested();
+		this._log.trace("Check cancellationToken for interrupt");
+		cancellationToken.throwIfCancellationRequested();
 
-			if (this._log.isTraceEnabled) {
-				this._log.trace("Executed Scalar:", underlyingResult);
-			}
+		if (this._log.isTraceEnabled) {
+			this._log.trace("Executed Scalar:", underlyingResult);
+		}
 
-			this._log.trace("Result processing");
-			if (underlyingResult.length > 0) {
-				this._log.trace("Result create new SQLiteSqlResultRecord()");
-				return underlyingResult.map((row) => new SQLiteSqlResultRecord(row));
-			} else {
-				this._log.trace("Result is empty");
-				return [];
-			}
-		}, cancellationToken);
+		this._log.trace("Result processing");
+		if (underlyingResult.length > 0) {
+			this._log.trace("Result create new SQLiteSqlResultRecord()");
+			return underlyingResult.map((row) => new SQLiteSqlResultRecord(row));
+		} else {
+			this._log.trace("Result is empty");
+			return [];
+		}
 	}
 
 	// tslint:disable-next-line: max-line-length
-	public executeQueryMultiSets(cancellationToken: zxteam.CancellationToken, ...values: Array<contract.SqlStatementParam>): zxteam.Task<Array<Array<contract.SqlResultRecord>>> {
-		return TaskImpl.run((ct: zxteam.CancellationToken) => {
-			if (this._log.isTraceEnabled) {
-				this._log.trace("Method executeQueryMultiSets not supported. Raise an exception.");
-			}
-			throw new Error("Not supported");
-		}, cancellationToken);
-	}
-
-	public executeScalar(
+	public async executeQueryMultiSets(
 		cancellationToken: zxteam.CancellationToken,
 		...values: Array<contract.SqlStatementParam>
-	): zxteam.Task<contract.SqlData> {
-		return TaskImpl.run(async (ct: zxteam.CancellationToken) => {
+	): Promise<ReadonlyArray<ReadonlyArray<contract.SqlResultRecord>>> {
+		if (this._log.isTraceEnabled) {
+			this._log.trace("Method executeQueryMultiSets not supported. Raise an exception.");
+		}
+		throw new Error("Not supported");
+	}
+
+	public async executeScalar(
+		cancellationToken: zxteam.CancellationToken,
+		...values: Array<contract.SqlStatementParam>
+	): Promise<contract.SqlData> {
+		if (this._log.isTraceEnabled) {
+			this._log.trace("Executing Scalar:", this._sqlText, values);
+		}
+
+		const underlyingResult = await helpers.sqlFetch(
+			this._owner.sqliteConnection,
+			this._sqlText,
+			helpers.statementArgumentsAdapter(values)
+		);
+
+		this._log.trace("Check cancellationToken for interrupt");
+		cancellationToken.throwIfCancellationRequested();
+
+		if (this._log.isTraceEnabled) {
+			this._log.trace("Executed Scalar:", underlyingResult);
+		}
+
+		this._log.trace("Result processing");
+		if (underlyingResult.length > 0) {
+			const underlyingResultFirstRow = underlyingResult[0];
+			const results = underlyingResultFirstRow[Object.keys(underlyingResultFirstRow)[0]];
+			const fields = Object.keys(underlyingResultFirstRow)[0];
+
 			if (this._log.isTraceEnabled) {
-				this._log.trace("Executing Scalar:", this._sqlText, values);
+				this._log.trace("Create SQLiteData and return result", results, fields);
 			}
 
-			const underlyingResult = await helpers.sqlFetch(
-				this._owner.sqliteConnection,
-				this._sqlText,
-				helpers.statementArgumentsAdapter(values)
-			);
-
-			this._log.trace("Check cancellationToken for interrupt");
-			ct.throwIfCancellationRequested();
-
+			return new SQLiteData(results, fields);
+		} else {
 			if (this._log.isTraceEnabled) {
-				this._log.trace("Executed Scalar:", underlyingResult);
+				this._log.trace("Returns not enough data to complete request. Raise an exception.", underlyingResult);
 			}
-
-			this._log.trace("Result processing");
-			if (underlyingResult.length > 0) {
-				const underlyingResultFirstRow = underlyingResult[0];
-				const results = underlyingResultFirstRow[Object.keys(underlyingResultFirstRow)[0]];
-				const fields = Object.keys(underlyingResultFirstRow)[0];
-
-				if (this._log.isTraceEnabled) {
-					this._log.trace("Create SQLiteData and return result", results, fields);
-				}
-
-				return new SQLiteData(results, fields);
-			} else {
-				if (this._log.isTraceEnabled) {
-					this._log.trace("Returns not enough data to complete request. Raise an exception.", underlyingResult);
-				}
-				throw new Error("Underlying SQLite provider returns not enough data to complete request.");
-			}
-		}, cancellationToken);
+			throw new Error("Underlying SQLite provider returns not enough data to complete request.");
+		}
 	}
 }
 
@@ -351,34 +339,32 @@ class SQLiteSqlResultRecord implements contract.SqlResultRecord {
 class SQLiteTempTable extends Initable implements contract.SqlTemporaryTable {
 
 	private readonly _owner: SQLiteProvider;
-	private readonly _cancellationToken: zxteam.CancellationToken;
 	private readonly _tableName: string;
 	private readonly _columnsDefinitions: string;
 
-	public constructor(owner: SQLiteProvider, cancellationToken: zxteam.CancellationToken, tableName: string, columnsDefinitions: string) {
+	public constructor(owner: SQLiteProvider, tableName: string, columnsDefinitions: string) {
 		super();
 		this._owner = owner;
-		this._cancellationToken = cancellationToken;
 		this._tableName = tableName;
 		this._columnsDefinitions = columnsDefinitions;
 	}
 
-	public bulkInsert(cancellationToken: zxteam.CancellationToken, bulkValues: Array<Array<contract.SqlStatementParam>>): zxteam.Task<void> {
+	public bulkInsert(cancellationToken: zxteam.CancellationToken, bulkValues: Array<Array<contract.SqlStatementParam>>): Promise<void> {
 		return this._owner.statement(`INSERT INTO temp.${this._tableName}`).execute(cancellationToken, bulkValues as any);
 	}
-	public crear(cancellationToken: zxteam.CancellationToken): zxteam.Task<void> {
+	public clear(cancellationToken: zxteam.CancellationToken): Promise<void> {
 		return this._owner.statement(`DELETE FROM temp.${this._tableName}`).execute(cancellationToken);
 	}
-	public insert(cancellationToken: zxteam.CancellationToken, values: Array<contract.SqlStatementParam>): zxteam.Task<void> {
+	public insert(cancellationToken: zxteam.CancellationToken, values: Array<contract.SqlStatementParam>): Promise<void> {
 		return this._owner.statement(`INSERT INTO temp.${this._tableName}`).execute(cancellationToken, ...values);
 	}
 
-	protected async onInit(): Promise<void> {
-		await this._owner.statement(`CREATE TEMPORARY TABLE ${this._tableName} (${this._columnsDefinitions})`).execute(this._cancellationToken);
+	protected async onInit(cancellationToken: zxteam.CancellationToken): Promise<void> {
+		await this._owner.statement(`CREATE TEMPORARY TABLE ${this._tableName} (${this._columnsDefinitions})`).execute(cancellationToken);
 	}
 	protected async onDispose(): Promise<void> {
 		try {
-			await this._owner.statement(`DROP TABLE temp.${this._tableName}`).execute(this._cancellationToken);
+			await this._owner.statement(`DROP TABLE temp.${this._tableName}`).execute(DUMMY_CANCELLATION_TOKEN);
 		} catch (e) {
 			// dispose never raise error
 			if (e instanceof Error && e.name === "CancelledError") {
@@ -709,7 +695,7 @@ namespace helpers {
 	}
 	async function loadScriptFromHttp(cancellationToken: zxteam.CancellationToken, urlPath: URL): Promise<string> {
 		const webClient = new WebClient();
-		const invokeResponse = await webClient.invoke(cancellationToken, { url: urlPath, method: "GET" }).promise;
+		const invokeResponse = await webClient.invoke(cancellationToken, { url: urlPath, method: "GET" });
 
 		if (invokeResponse.statusCode !== 200) {
 			throw new Error(`Cannot read remote SQL script. Unsuccessful operation code status ${invokeResponse.statusCode}`);

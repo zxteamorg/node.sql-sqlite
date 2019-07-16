@@ -4,7 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import { URL, fileURLToPath, pathToFileURL } from "url";
 
-import { Factory, CancellationToken } from "@zxteam/contract";
+import { CancellationToken } from "@zxteam/contract";
 import { financial } from "@zxteam/financial.js";
 import ensureFactory from "@zxteam/ensure.js";
 import { SqlProvider, EmbeddedSqlProviderFactory } from "@zxteam/contract.sql";
@@ -95,12 +95,12 @@ describe("SQLite Tests", function () {
 
 	beforeEach(async function () {
 		// runs before each test in this block
-		sqlProvider = await sqlProviderFactory.create().promise;
+		sqlProvider = await sqlProviderFactory.create(DUMMY_CANCELLATION_TOKEN);
 	});
 	afterEach(async function () {
 		// runs after each test in this block
 		if (sqlProvider) {
-			await sqlProvider.dispose().promise;
+			await sqlProvider.dispose();
 			sqlProvider = null;
 		}
 	});
@@ -108,82 +108,82 @@ describe("SQLite Tests", function () {
 	it.skip("Read TRUE from multi record set through executeScalar", async function () {
 		const result = await getSqlProvider()
 			.statement("CALL sp_multi_fetch_ints()")
-			.executeScalar(DUMMY_CANCELLATION_TOKEN).promise; // executeScalar() should return first row + first column
+			.executeScalar(DUMMY_CANCELLATION_TOKEN); // executeScalar() should return first row + first column
 		assert.equal(result.asBoolean, true);
 	});
 	it("Read TRUE as boolean through executeScalar", async function () {
 		const result = await getSqlProvider()
 			.statement("SELECT 1 AS c0, 0 AS c1 UNION ALL SELECT 0, 0")
-			.executeScalar(DUMMY_CANCELLATION_TOKEN).promise; // executeScalar() should return first row + first column
+			.executeScalar(DUMMY_CANCELLATION_TOKEN); // executeScalar() should return first row + first column
 		assert.equal(result.asBoolean, true);
 	});
 	it("Read 1 as boolean through executeScalar", async function () {
 		const result = await getSqlProvider()
 			.statement("SELECT 1 AS c0, 0 AS c1 UNION ALL SELECT 0, 0")
-			.executeScalar(DUMMY_CANCELLATION_TOKEN).promise; // executeScalar() should return first row + first column
+			.executeScalar(DUMMY_CANCELLATION_TOKEN); // executeScalar() should return first row + first column
 		assert.equal(result.asBoolean, true);
 	});
 	it("Read 1 as boolean through executeScalar (Stored Procedure)", async function () {
 		const result = await getSqlProvider()
 			.statement("SELECT EXISTS(SELECT 1 FROM tb_1 AS t WHERE t.varcharValue = 'one') AS \"is_exist\"")
-			.executeScalar(DUMMY_CANCELLATION_TOKEN).promise; // executeScalar() should return first row + first column
+			.executeScalar(DUMMY_CANCELLATION_TOKEN); // executeScalar() should return first row + first column
 		assert.equal(result.asBoolean, true);
 	});
 	it("Read 0 as boolean through executeScalar (Stored Procedure)", async function () {
 		const result = await getSqlProvider()
 			.statement("SELECT EXISTS(SELECT 1 FROM tb_1 AS t WHERE t.varcharValue = 'none') AS \"is_exist\"")
-			.executeScalar(DUMMY_CANCELLATION_TOKEN).promise; // executeScalar() should return first row + first column
+			.executeScalar(DUMMY_CANCELLATION_TOKEN); // executeScalar() should return first row + first column
 		assert.equal(result.asBoolean, false);
 	});
 	it("Read FALSE as boolean through executeScalar", async function () {
 		const result = await getSqlProvider()
 			.statement("SELECT FALSE AS c0, TRUE AS c1 UNION ALL SELECT TRUE, TRUE")
-			.executeScalar(DUMMY_CANCELLATION_TOKEN).promise; // executeScalar() should return first row + first column
+			.executeScalar(DUMMY_CANCELLATION_TOKEN); // executeScalar() should return first row + first column
 		assert.equal(result.asBoolean, false);
 	});
 	it("Read 0 as boolean through executeScalar", async function () {
 		const result = await getSqlProvider()
 			.statement("SELECT 0 AS c0, 1 AS c1 UNION SELECT 1, 1")
-			.executeScalar(DUMMY_CANCELLATION_TOKEN).promise; // executeScalar() should return first row + first column
+			.executeScalar(DUMMY_CANCELLATION_TOKEN); // executeScalar() should return first row + first column
 		assert.equal(result.asBoolean, false);
 	});
 	it("Read NULL as nullable boolean through executeScalar", async function () {
 		const result = await getSqlProvider()
 			.statement("SELECT NULL AS c0, 1 AS c1 UNION SELECT 1, 1")
-			.executeScalar(DUMMY_CANCELLATION_TOKEN).promise; // executeScalar() should return first row + first column
+			.executeScalar(DUMMY_CANCELLATION_TOKEN); // executeScalar() should return first row + first column
 		assert.equal(result.asNullableBoolean, null);
 	});
 
 	it("Read \"Hello, world!!!\" as string through executeScalar", async function () {
 		const result = await getSqlProvider()
 			.statement("SELECT 'Hello, world!!!' AS c0, 'stub12' AS c1 UNION ALL SELECT 'stub21', 'stub22'")
-			.executeScalar(DUMMY_CANCELLATION_TOKEN).promise; // executeScalar() should return first row + first column
+			.executeScalar(DUMMY_CANCELLATION_TOKEN); // executeScalar() should return first row + first column
 		assert.equal(result.asString, "Hello, world!!!");
 	});
 	it("Read NULL as nullable string through executeScalar", async function () {
 		const result = await getSqlProvider()
 			.statement("SELECT NULL AS c0, 'stub12' AS c1 UNION ALL SELECT 'stub21', 'stub22'")
-			.executeScalar(DUMMY_CANCELLATION_TOKEN).promise; // executeScalar() should return first row + first column
+			.executeScalar(DUMMY_CANCELLATION_TOKEN); // executeScalar() should return first row + first column
 		assert.equal(result.asNullableString, null);
 	});
 
 	it("Read 11 as number through executeScalar", async function () {
 		const result = await getSqlProvider()
 			.statement("SELECT 11 AS c0, 12 AS c1 UNION SELECT 21, 22")
-			.executeScalar(DUMMY_CANCELLATION_TOKEN).promise; // executeScalar() should return first row + first column
+			.executeScalar(DUMMY_CANCELLATION_TOKEN); // executeScalar() should return first row + first column
 		assert.equal(result.asNumber, 11);
 	});
 	it("Read NULL as nullable number through executeScalar", async function () {
 		const result = await getSqlProvider()
 			.statement("SELECT NULL AS c0, 12 AS c1 UNION SELECT 21, 22")
-			.executeScalar(DUMMY_CANCELLATION_TOKEN).promise; // executeScalar() should return first row + first column
+			.executeScalar(DUMMY_CANCELLATION_TOKEN); // executeScalar() should return first row + first column
 		assert.equal(result.asNullableNumber, null);
 	});
 
 	it("Read 11.42 as FinancialLike through executeScalar", async function () {
 		const result = await getSqlProvider()
 			.statement("SELECT 11.42 AS c0, 12 AS c1 UNION SELECT 21, 22")
-			.executeScalar(DUMMY_CANCELLATION_TOKEN).promise; // executeScalar() should return first row + first column
+			.executeScalar(DUMMY_CANCELLATION_TOKEN); // executeScalar() should return first row + first column
 		const v = result.asFinancial;
 		assert.equal(v.sign, "+");
 		assert.equal(v.whole, "11");
@@ -192,7 +192,7 @@ describe("SQLite Tests", function () {
 	it("Read '11.42' as FinancialLike through executeScalar", async function () {
 		const result = await getSqlProvider()
 			.statement("SELECT '11.42' AS c0, '12' AS c1 UNION SELECT '21', '22'")
-			.executeScalar(DUMMY_CANCELLATION_TOKEN).promise; // executeScalar() should return first row + first column
+			.executeScalar(DUMMY_CANCELLATION_TOKEN); // executeScalar() should return first row + first column
 		const v = result.asFinancial;
 		assert.equal(v.sign, "+");
 		assert.equal(v.whole, "11");
@@ -203,34 +203,34 @@ describe("SQLite Tests", function () {
 		const result = await getSqlProvider()
 			.statement(
 				"SELECT strftime('2018-05-01 12:01:02.345') AS c0, date('now') AS c1 UNION ALL SELECT date('now'), date('now')")
-			.executeScalar(DUMMY_CANCELLATION_TOKEN).promise; // executeScalar() should return first row + first column
+			.executeScalar(DUMMY_CANCELLATION_TOKEN); // executeScalar() should return first row + first column
 		assert.equalDate(result.asDate, new Date(2018, 4/*May month = 4*/, 1, 12, 1, 2, 345));
 	});
 	it("Read NULL as nullable Date through executeScalar", async function () {
 		const result = await getSqlProvider()
 			.statement(
 				"SELECT NULL AS c0, date('now') AS c1 UNION ALL SELECT date('now'), date('now');")
-			.executeScalar(DUMMY_CANCELLATION_TOKEN).promise; // executeScalar() should return first row + first column
+			.executeScalar(DUMMY_CANCELLATION_TOKEN); // executeScalar() should return first row + first column
 		assert.equal(result.asNullableDate, null);
 	});
 
 	it("Read 0x007FFF as Uint8Array through executeScalar", async function () {
 		const result = await getSqlProvider()
 			.statement("SELECT x'007FFF' AS c0, x'00' AS c1 UNION ALL SELECT x'00', x'00'")
-			.executeScalar(DUMMY_CANCELLATION_TOKEN).promise; // executeScalar() should return first row + first column
+			.executeScalar(DUMMY_CANCELLATION_TOKEN); // executeScalar() should return first row + first column
 		assert.equalBytes(result.asBinary, new Uint8Array([0, 127, 255]));
 	});
 	it("Read NULL as Uint8Array through executeScalar", async function () {
 		const result = await getSqlProvider()
 			.statement("SELECT NULL AS c0, x'00' AS c1 UNION ALL SELECT x'00', x'00'")
-			.executeScalar(DUMMY_CANCELLATION_TOKEN).promise; // executeScalar() should return first row + first column
+			.executeScalar(DUMMY_CANCELLATION_TOKEN); // executeScalar() should return first row + first column
 		assert.equal(result.asNullableBinary, null);
 	});
 
 	it("Read booleans through executeQuery", async function () {
 		const resultArray = await getSqlProvider()
 			.statement("SELECT 1 AS c0, 0 AS c1 UNION ALL SELECT 0, 0 UNION ALL SELECT 1, 0")
-			.executeQuery(DUMMY_CANCELLATION_TOKEN).promise;
+			.executeQuery(DUMMY_CANCELLATION_TOKEN);
 		assert.instanceOf(resultArray, Array);
 		assert.equal(resultArray.length, 3);
 		assert.equal(resultArray[0].get("c0").asBoolean, true);
@@ -244,7 +244,7 @@ describe("SQLite Tests", function () {
 		const resultArray = await getSqlProvider()
 			.statement("SELECT 'one' AS c0, 'two' AS c1 UNION ALL SELECT 'three'" +
 				", 'four' UNION ALL SELECT 'five', 'six'")
-			.executeQuery(DUMMY_CANCELLATION_TOKEN).promise;
+			.executeQuery(DUMMY_CANCELLATION_TOKEN);
 		assert.instanceOf(resultArray, Array);
 		assert.equal(resultArray.length, 3);
 		assert.equal(resultArray[0].get("c0").asString, "one");
@@ -257,7 +257,7 @@ describe("SQLite Tests", function () {
 	it("Read strings through executeQuery (Stored Proc)", async function () {
 		const resultArray = await getSqlProvider()
 			.statement("SELECT varcharValue, intValue FROM tb_1")
-			.executeQuery(DUMMY_CANCELLATION_TOKEN).promise;
+			.executeQuery(DUMMY_CANCELLATION_TOKEN);
 
 		assert.instanceOf(resultArray, Array);
 		assert.equal(resultArray.length, 3);
@@ -268,7 +268,7 @@ describe("SQLite Tests", function () {
 	it.skip("Read (string and int)s through executeQuery (Multi record sets)", async function () {
 		const resultArray = await getSqlProvider()
 			.statement("CALL `sp_multi_fetch`")
-			.executeQuery(DUMMY_CANCELLATION_TOKEN).promise;
+			.executeQuery(DUMMY_CANCELLATION_TOKEN);
 
 		assert.instanceOf(resultArray, Array);
 		assert.equal(resultArray.length, 3);
@@ -282,7 +282,7 @@ describe("SQLite Tests", function () {
 	it("Read empty result through executeQuery (SELECT)", async function () {
 		const resultArray = await getSqlProvider()
 			.statement("SELECT * FROM tb_1 WHERE 1=2")
-			.executeQuery(DUMMY_CANCELLATION_TOKEN).promise;
+			.executeQuery(DUMMY_CANCELLATION_TOKEN);
 
 		assert.instanceOf(resultArray, Array);
 		assert.equal(resultArray.length, 0);
@@ -290,7 +290,7 @@ describe("SQLite Tests", function () {
 	it("Read empty result through executeQuery", async function () {
 		const resultArray = await getSqlProvider()
 			.statement("SELECT 1 WHERE 1=0")
-			.executeQuery(DUMMY_CANCELLATION_TOKEN).promise;
+			.executeQuery(DUMMY_CANCELLATION_TOKEN);
 
 		assert.instanceOf(resultArray, Array);
 		assert.equal(resultArray.length, 0);
@@ -312,15 +312,15 @@ describe("SQLite Tests", function () {
 			DUMMY_CANCELLATION_TOKEN,
 			"tb_1", // Should override(hide) existing table
 			"id INTEGER PRIMARY KEY AUTOINCREMENT, title VARCHAR(32) NOT NULL, value SMALLINT NOT NULL"
-		).promise;
+		);
 		try {
 			await getSqlProvider().statement("INSERT INTO tb_1(title, value) VALUES('test title 1', ?)")
-				.execute(DUMMY_CANCELLATION_TOKEN, 1).promise;
+				.execute(DUMMY_CANCELLATION_TOKEN, 1);
 			await getSqlProvider().statement("INSERT INTO tb_1(title, value) VALUES('test title 2', ?)")
-				.execute(DUMMY_CANCELLATION_TOKEN, 2).promise;
+				.execute(DUMMY_CANCELLATION_TOKEN, 2);
 
 			const resultArray = await getSqlProvider().statement("SELECT title, value FROM tb_1")
-				.executeQuery(DUMMY_CANCELLATION_TOKEN).promise;
+				.executeQuery(DUMMY_CANCELLATION_TOKEN);
 
 			assert.instanceOf(resultArray, Array);
 			assert.equal(resultArray.length, 2);
@@ -329,11 +329,11 @@ describe("SQLite Tests", function () {
 			assert.equal(resultArray[1].get("title").asString, "test title 2");
 			assert.equal(resultArray[1].get("value").asNumber, 2);
 		} finally {
-			await tempTable.dispose().promise;
+			await tempTable.dispose();
 		}
 
 		// tslint:disable-next-line:max-line-length
-		const resultArrayAfterDestoroyTempTable = await getSqlProvider().statement("SELECT * FROM tb_1").executeQuery(DUMMY_CANCELLATION_TOKEN).promise;
+		const resultArrayAfterDestoroyTempTable = await getSqlProvider().statement("SELECT * FROM tb_1").executeQuery(DUMMY_CANCELLATION_TOKEN);
 
 		assert.instanceOf(resultArrayAfterDestoroyTempTable, Array);
 		assert.equal(resultArrayAfterDestoroyTempTable.length, 3);
@@ -343,24 +343,24 @@ describe("SQLite Tests", function () {
 	it("Should be able to pass null into query args", async function () {
 		const result1 = await getSqlProvider()
 			.statement("SELECT 1 WHERE ? IS NULL")
-			.executeScalar(DUMMY_CANCELLATION_TOKEN, null).promise;
+			.executeScalar(DUMMY_CANCELLATION_TOKEN, null);
 		assert.equal(result1.asInteger, 1);
 
 		const result2 = await getSqlProvider()
 			.statement("SELECT 1 WHERE ? IS NULL")
-			.executeQuery(DUMMY_CANCELLATION_TOKEN, 0).promise;
+			.executeQuery(DUMMY_CANCELLATION_TOKEN, 0);
 		assert.equal(result2.length, 0);
 	});
 	it("Should be able to pass Financial into query args", async function () {
 		const result1 = await getSqlProvider()
 			.statement("SELECT ?")
-			.executeScalar(DUMMY_CANCELLATION_TOKEN, financial.parse("42.123")).promise;
+			.executeScalar(DUMMY_CANCELLATION_TOKEN, financial.parse("42.123"));
 		assert.equal(result1.asString, "42.123");
 	});
 	it("Read with IN condition", async function () {
 		const result = await getSqlProvider()
 			.statement("SELECT \"varcharValue\" FROM \"tb_1\" WHERE \"intValue\" IN (?)")
-			.executeQuery(DUMMY_CANCELLATION_TOKEN, [1, 3]).promise;
+			.executeQuery(DUMMY_CANCELLATION_TOKEN, [1, 3]);
 		assert.isArray(result);
 		assert.equal(result.length, 2);
 		assert.equal(result[0].get("varcharValue").asString, "one");
@@ -369,14 +369,14 @@ describe("SQLite Tests", function () {
 	it("Insert two variable to table tb_1 ", async function () {
 		await getSqlProvider()
 			.statement("INSERT INTO tb_1(varcharValue, intValue) VALUES (?, ?)")
-			.execute(DUMMY_CANCELLATION_TOKEN, "One hundred", 100).promise;
+			.execute(DUMMY_CANCELLATION_TOKEN, "One hundred", 100);
 		await getSqlProvider()
 			.statement("INSERT INTO tb_1(varcharValue, intValue) VALUES (?, ?);")
-			.execute(DUMMY_CANCELLATION_TOKEN, "Two hundred", 200).promise;
+			.execute(DUMMY_CANCELLATION_TOKEN, "Two hundred", 200);
 
 		const result = await getSqlProvider()
 			.statement("SELECT \"varcharValue\", \"intValue\" FROM \"tb_1\" WHERE \"intValue\" IN (?,?)")
-			.executeQuery(DUMMY_CANCELLATION_TOKEN, 100, 200).promise;
+			.executeQuery(DUMMY_CANCELLATION_TOKEN, 100, 200);
 
 		assert.isArray(result);
 		assert.equal(result.length, 2);
@@ -386,7 +386,7 @@ describe("SQLite Tests", function () {
 	it.skip("Read two Result Sets via sp_multi_fetch", async function () {
 		const resultSets = await getSqlProvider()
 			.statement("CALL sp_multi_fetch()")
-			.executeQueryMultiSets(DUMMY_CANCELLATION_TOKEN).promise;
+			.executeQueryMultiSets(DUMMY_CANCELLATION_TOKEN);
 		assert.isArray(resultSets);
 		assert.equal(resultSets.length, 2, "The procedure 'sp_multi_fetch' should return two result sets");
 
@@ -415,7 +415,7 @@ describe("SQLite Tests", function () {
 	it("Read result through executeQuery (SELECT) WHERE IN many", async function () {
 		const resultArray = await getSqlProvider()
 			.statement("SELECT * FROM \"tb_1\" WHERE intValue IN (?)")
-			.executeQuery(DUMMY_CANCELLATION_TOKEN, [1, 2, 3]).promise;
+			.executeQuery(DUMMY_CANCELLATION_TOKEN, [1, 2, 3]);
 
 		assert.instanceOf(resultArray, Array);
 		assert.equal(resultArray.length, 3);
