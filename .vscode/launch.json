@@ -2,13 +2,12 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
-			"name": "Test",
+			"name": "Tests",
 			"type": "node",
 			"request": "launch",
 			"preLaunchTask": "compile:test:ts",
 			"runtimeExecutable": null,
 			"runtimeArgs": [
-				"--debug-brk",
 				"--nolazy",
 				"--require",
 				"source-map-support/register"
@@ -18,19 +17,13 @@
 			"args": [
 				"--no-timeouts",
 				"--colors",
+				"--debug-brk",
 				"test/**/*.js"
 			],
-			"cwd": "${workspaceRoot}",
 			"env": {
-				"NODE_ENV": "development",
-				"TEST_DB_URL": "file://${workspaceRoot}/.tmp/emptytest.db"
+				"NODE_ENV": "development"
 			},
-			"console": "internalConsole",
-			"sourceMaps": true,
-			"outFiles": [
-				"${workspaceRoot}/src/**/*.js",
-				"${workspaceRoot}/test/**/*.js"
-			]
+			"sourceMaps": true
 		}
 	]
 }

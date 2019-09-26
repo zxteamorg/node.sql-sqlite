@@ -5,9 +5,9 @@ import * as path from "path";
 import { URL, fileURLToPath, pathToFileURL } from "url";
 
 import { CancellationToken } from "@zxteam/contract";
-import { financial } from "@zxteam/financial.js";
-import ensureFactory from "@zxteam/ensure.js";
-import { SqlProvider, EmbeddedSqlProviderFactory } from "@zxteam/contract.sql";
+import { financial } from "@zxteam/financial";
+import ensureFactory from "@zxteam/ensure";
+import { SqlProvider, EmbeddedSqlProviderFactory } from "@zxteam/contract-sql";
 
 import * as lib from "../src";
 
@@ -185,18 +185,16 @@ describe("SQLite Tests", function () {
 			.statement("SELECT 11.42 AS c0, 12 AS c1 UNION SELECT 21, 22")
 			.executeScalar(DUMMY_CANCELLATION_TOKEN); // executeScalar() should return first row + first column
 		const v = result.asFinancial;
-		assert.equal(v.sign, "+");
-		assert.equal(v.whole, "11");
-		assert.equal(v.fractional, "42");
+		assert.isTrue(v.isPositive());
+		assert.equal(v.toString(), "11.42");
 	});
-	it("Read '11.42' as FinancialLike through executeScalar", async function () {
+	it("Read '-11.42' as FinancialLike through executeScalar", async function () {
 		const result = await getSqlProvider()
-			.statement("SELECT '11.42' AS c0, '12' AS c1 UNION SELECT '21', '22'")
+			.statement("SELECT '-11.42' AS c0, '12' AS c1 UNION SELECT '21', '22'")
 			.executeScalar(DUMMY_CANCELLATION_TOKEN); // executeScalar() should return first row + first column
 		const v = result.asFinancial;
-		assert.equal(v.sign, "+");
-		assert.equal(v.whole, "11");
-		assert.equal(v.fractional, "42");
+		assert.isTrue(v.isNegative());
+		assert.equal(v.toString(), "-11.42");
 	});
 
 	it("Read 2018-05-01T12:01:03.345 as Date through executeScalar", async function () {

@@ -1,6 +1,6 @@
 {
 	"name": "@zxteam/sql.sqlite",
-	"version": "6.0.2",
+	"version": "6.0.21",
 	"description": "ZXTeam's SQL implementation for SQLite",
 	"main": "./src/index.js",
 	"types": "./src/index.d.ts",
@@ -22,20 +22,20 @@
 	],
 	"license": "MIT",
 	"devDependencies": {
-		"@types/chai-datetime": "^0.0.32",
+		"@types/chai-datetime": "^0.0.33",
 		"@types/sqlite3": "^3.1.5",
 		"@zxnode/build": "^0.0.34",
 		"chai-datetime": "^1.5.0"
 	},
 	"dependencies": {
-		"@zxteam/contract": "^6.0.2",
-		"@zxteam/contract.sql": "^6.0.2",
-		"@zxteam/disposable": "^6.0.1",
-		"@zxteam/ensure.js": "^6.0.2",
-		"@zxteam/financial.js": "^6.0.1",
-		"@zxteam/task": "^6.0.1",
-		"@zxteam/webclient": "^6.0.1",
-		"sqlite3": "^4.0.9"
+		"@zxteam/cancellation": "^6.0.18",
+		"@zxteam/contract": "^6.0.21",
+		"@zxteam/contract-sql": "^6.0.21",
+		"@zxteam/disposable": "^6.0.18",
+		"@zxteam/ensure": "^6.0.18",
+		"@zxteam/financial": "^6.0.21",
+		"@zxteam/http-client": "^6.0.18",
+		"sqlite3": "^4.1.0"
 	},
 	"keywords": [
 		"zxteam",
@@ -44,7 +44,7 @@
 	],
 	"repository": {
 		"type": "git",
-		"url": "ssh://git@dev.zxteam.net:22282/pub/node/sql.sqlite.git"
+		"url": "ssh://git@code.zxteam.net:22282/pub/node/sql.sqlite.git"
 	},
 	"bugs": {
 		"url": "https://dev.zxteam.net/pub/node/sql.sqlite/issues"
