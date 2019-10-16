@@ -7,7 +7,7 @@ import { URL, fileURLToPath, pathToFileURL } from "url";
 import { CancellationToken } from "@zxteam/contract";
 import { financial } from "@zxteam/financial";
 import ensureFactory from "@zxteam/ensure";
-import { SqlProvider, EmbeddedSqlProviderFactory } from "@zxteam/contract-sql";
+import { SqlProvider, EmbeddedSqlProviderFactory } from "@zxteam/sql";
 
 import * as lib from "../src";
 
@@ -417,6 +417,26 @@ describe("SQLite Tests", function () {
 
 		assert.instanceOf(resultArray, Array);
 		assert.equal(resultArray.length, 3);
+	});
+	it("Should raise when no records for executeScalar", async function () {
+		let expectedError!: Error;
+		try {
+			await getSqlProvider()
+				.statement("SELECT * FROM \"tb_1\" WHERE 1 = 0")
+				.executeScalar(DUMMY_CANCELLATION_TOKEN);
+		} catch (e) {
+			expectedError = e;
+		}
+
+		assert.isDefined(expectedError);
+		assert.include(expectedError.message, "SQLite provider returns not enough data");
+	});
+	it("Should return null when no records for executeScalarOrNull", async function () {
+		const executeResult = await getSqlProvider()
+			.statement("SELECT * FROM \"tb_1\" WHERE 1 = 0")
+			.executeScalarOrNull(DUMMY_CANCELLATION_TOKEN);
+
+		assert.isNull(executeResult);
 	});
 });
 

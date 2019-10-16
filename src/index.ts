@@ -8,7 +8,7 @@ import * as fs from "fs";
 import { promisify } from "util";
 import { URL, fileURLToPath, pathToFileURL } from "url";
 
-import * as contract from "@zxteam/contract-sql";
+import * as contract from "@zxteam/sql";
 
 const existsAsync = promisify(fs.exists);
 const readFileAsync = promisify(fs.readFile);
@@ -282,6 +282,44 @@ class SQLiteStatement implements contract.SqlStatement {
 				this._log.trace("Returns not enough data to complete request. Raise an exception.", underlyingResult);
 			}
 			throw new Error("Underlying SQLite provider returns not enough data to complete request.");
+		}
+	}
+
+	public async executeScalarOrNull(
+		cancellationToken: CancellationToken,
+		...values: Array<contract.SqlStatementParam>
+	): Promise<contract.SqlData | null> {
+		if (this._log.isTraceEnabled) {
+			this._log.trace("Executing ScalarOrNull:", this._sqlText, values);
+		}
+
+		const underlyingResult = await helpers.sqlFetch(
+			this._owner.sqliteConnection,
+			this._sqlText,
+			helpers.statementArgumentsAdapter(this._owner.financialOperation, values)
+		);
+
+		this._log.trace("Check cancellationToken for interrupt");
+		cancellationToken.throwIfCancellationRequested();
+
+		if (this._log.isTraceEnabled) {
+			this._log.trace("Executed Scalar:", underlyingResult);
+		}
+
+		this._log.trace("Result processing");
+		if (underlyingResult.length > 0) {
+			const underlyingResultFirstRow = underlyingResult[0];
+			const results = underlyingResultFirstRow[Object.keys(underlyingResultFirstRow)[0]];
+			const fields = Object.keys(underlyingResultFirstRow)[0];
+
+			if (this._log.isTraceEnabled) {
+				this._log.trace("Create SQLiteData and return result", results, fields);
+			}
+
+			return new SQLiteData(results, fields, this._owner.financialOperation);
+		} else {
+			this._log.trace("Returns no records. Result is null.");
+			return null;
 		}
 	}
 }
