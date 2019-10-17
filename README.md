@@ -1,4 +1,5 @@
 ## Structure sql file (example)
+```
 ./database/v001/10-table/01-user.sql
 ./database/v001/10-table/02-work.sql
 ./database/v001/20-data/01-user.sql
@@ -6,6 +7,7 @@
 ./database/v002/migration.sql
 ./database/v003/migration.sql
 ./database/v004/migration.sql
+```
 
 ## How use
 
