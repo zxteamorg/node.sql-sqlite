@@ -127,6 +127,70 @@ export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactor
 			}
 		}
 	}
+
+	public async migration(cancellationToken: CancellationToken, pathToScripts: URL, currVersion: number, futVersion: number): Promise<void> {
+		this._logger.trace("Inside migration()");
+
+		if (this._logger.isTraceEnabled) {
+			this._logger.trace(`Check is file ${this._url} exists`);
+		}
+
+		const dbPath = fileURLToPath(this._url);
+		const isExist = await existsAsync(dbPath);
+		if (!isExist) {
+			if (this._logger.isTraceEnabled) {
+				this._logger.trace(`The file ${this._url} don't already exists.`);
+			}
+			this.newDatabase(cancellationToken);
+		}
+
+		this._logger.trace("Check cancellationToken for interrupt");
+		cancellationToken.throwIfCancellationRequested();
+
+
+		this._logger.trace("Check structure folder");
+		const listVersions: Array<string> = helpers.getDirectories(pathToScripts);
+
+		for (const version of listVersions) {
+			const urlVersion: URL = new URL(pathToFileURL + version);
+			const listFilesExsist: Array<string> = helpers.getFiles(urlVersion);
+			const isValidStructure: boolean = helpers.isValidStructure(listFilesExsist);
+
+			if (!isValidStructure) { throw new Error("Invalid structure files"); }
+		}
+
+		this._logger.trace("Open SQLite database for non-exsting file");
+		const db = await helpers.openDatabase(this._url);
+		try {
+			const loadListVersions: Array<string> = helpers.isVerificationVersion(listVersions, currVersion, futVersion);
+			if (loadListVersions.length > 0) {
+				for (const version of loadListVersions) {
+					const urlVersion: URL = new URL(pathToFileURL + version);
+					const listFilesExsist: Array<string> = helpers.getFiles(urlVersion);
+
+					if (listFilesExsist.includes(fileScripts.INIT)) {
+						this._logger.trace(`First step run ${fileScripts.INIT} in version ${version}`);
+						const initScriptUrl = new URL(urlVersion + fileScripts.INIT);
+						await helpers.initalizeDatabaseByScript(cancellationToken, initScriptUrl, db, this._logger);
+					}
+
+					if (listFilesExsist.includes(fileScripts.MIGRATION)) {
+						this._logger.trace(`Second step run ${fileScripts.MIGRATION} in version ${version}`);
+
+					}
+
+					if (listFilesExsist.includes(fileScripts.FINALIZE)) {
+						this._logger.trace(`Third step run ${fileScripts.FINALIZE} in version ${version}`);
+						const initScriptUrl = new URL(urlVersion + fileScripts.FINALIZE);
+						await helpers.initalizeDatabaseByScript(cancellationToken, initScriptUrl, db, this._logger);
+					}
+				}
+			}
+		} finally {
+			this._logger.trace("Close SQLite database");
+			await helpers.closeDatabase(db);
+		}
+	}
 }
 
 export default SqliteProviderFactory;
@@ -692,6 +756,37 @@ namespace helpers {
 			}
 		}
 	}
+	export function getDirectories(source: URL): Array<string> {
+		return fs.readdirSync(source, { withFileTypes: true })
+			.filter(dirent => dirent.isDirectory())
+			.map(dirent => dirent.name);
+	}
+	export function getFiles(folder: URL): Array<string> {
+		return fs.readdirSync(folder);
+	}
+	export function isValidStructure(listOfFiles: Array<string>): boolean {
+		const listFiles = [fileScripts.INIT, fileScripts.MIGRATION, fileScripts.FINALIZE];
+		if (listOfFiles.length > 0) {
+			for (const file of listOfFiles) {
+				if (listFiles.includes(file as any)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+	export function isVerificationVersion(listVersions: Array<string>, currVersion: number, futVersion: number): Array<string> {
+		const friendly: Array<string> = [];
+
+		for (let version = currVersion; version <= futVersion; ++version) {
+			const strVersion = version.toString();
+			const isExist = listVersions.includes(strVersion);
+
+			if (isExist) { friendly.push(strVersion); }
+		}
+		return friendly;
+	}
+
 	function unwrapSqlAndParams(sql: string, params?: Array<any>): [string, Array<any>] {
 		let finalSql = "";
 		let searchStart = 0;
@@ -721,7 +816,6 @@ namespace helpers {
 		throw new Error(`Cannot unwrap query: ${sql}`);
 
 	}
-
 	async function loadScriptAndParseScript(cancellationToken: CancellationToken, urlPath: URL): Promise<Array<string>> {
 		const sqlScriptContent = await loadScript(cancellationToken, urlPath);
 		const sqlCommands = parseCommands(sqlScriptContent);
@@ -765,4 +859,10 @@ namespace helpers {
 		}
 		return allCommands;
 	}
+}
+
+declare enum fileScripts {
+	INIT = "init.sql",
+	MIGRATION = "migration.js",
+	FINALIZE = "finalize.sql"
 }
