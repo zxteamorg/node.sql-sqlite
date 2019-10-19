@@ -51,10 +51,17 @@
 	},
 	"homepage": "https://dev.zxteam.net/pub/node/sql-sqlite#readme",
 	"scripts": {
+		"lint": "tslint --project .",
 		"build": "zxbuild clean dist",
 		"test:local": "env TEST_DB_URL=\"sqlite://\" mocha --require source-map-support/register --recursive \"test/**/*.test.js\"",
 		"test": "mocha --require source-map-support/register --recursive \"test/**/*.test.js\"",
 		"prepare:devdb": "node scripts/init-test-db.js"
 	},
-	"private": true
+	"private": true,
+	"husky": {
+		"hooks": {
+			"pre-commit": "npm run lint && pretty-quick --staged",
+			"pre-push": "npm run build && npm run test"
+		}
+	}
 }
