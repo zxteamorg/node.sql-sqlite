@@ -6,13 +6,11 @@
 			"type": "node",
 			"request": "launch",
 			"preLaunchTask": "compile:test:ts",
-			"runtimeExecutable": null,
 			"runtimeArgs": [
 				"--nolazy",
 				"--require",
 				"source-map-support/register"
 			],
-			"stopOnEntry": false,
 			"program": "${workspaceRoot}/node_modules/mocha/bin/_mocha",
 			"args": [
 				"--no-timeouts",
@@ -20,10 +18,15 @@
 				"--debug-brk",
 				"test/**/*.js"
 			],
+			"cwd": "${workspaceRoot}",
+			"sourceMaps": true,
+			"outFiles": [
+				"${workspaceRoot}/src/**/*.js",
+				"${workspaceRoot}/test/**/*.js"
+			],
 			"env": {
 				"NODE_ENV": "development"
 			},
-			"sourceMaps": true
 		}
 	]
 }
