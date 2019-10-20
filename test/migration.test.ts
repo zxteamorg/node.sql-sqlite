@@ -44,7 +44,7 @@ function getSQLiteUrltoScripts(): URL {
 	return pathToFileURL(path.join(__dirname, "database"));
 }
 
-describe.skip("SQLite Migration Database", function () {
+describe("SQLite Migration Database", function () {
 	beforeEach(async function () {
 		const pathTodb = fileURLToPath(getSQLiteUrltoDb());
 		if (fs.existsSync(pathTodb)) {
