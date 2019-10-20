@@ -1,0 +1,65 @@
+import * as chai from "chai";
+import { CancellationToken } from "@zxteam/contract";
+import * as fs from "fs";
+import * as http from "http";
+import * as os from "os";
+import * as path from "path";
+import { URL, fileURLToPath, pathToFileURL } from "url";
+
+import * as lib from "../src";
+
+chai.use(require("chai-datetime"));
+chai.use(function (c, u) {
+	const a = c.assert;
+	a.equalBytes = function (actual: Uint8Array, expected: Uint8Array, msg?: string) {
+		const message = (msg === null || msg === undefined) ?
+			("expected " + actual.toString() + " to equal " + expected.toString())
+			: msg;
+		assert.equal(actual.length, expected.length, message);
+		const len = actual.length;
+		for (let index = 0; index < len; ++index) {
+			const actualPart = actual[index];
+			const expectedPart = expected[index];
+			assert.equal(actualPart, expectedPart, message);
+		}
+	};
+});
+
+const { assert } = chai;
+
+const DUMMY_CANCELLATION_TOKEN: CancellationToken = {
+	get isCancellationRequested(): boolean { return false; },
+	addCancelListener(cb: Function): void { /* STUB */ },
+	removeCancelListener(cb: Function): void { /* STUB */ },
+	throwIfCancellationRequested(): void { /* STUB */ }
+};
+
+function getSQLiteUrltoDb(): URL {
+	const tmpDirectory = os.tmpdir();
+	const pathToDB = path.join(tmpDirectory, "sqliteForCreateTest.db");
+	const urlToDB = pathToFileURL(pathToDB);
+	return urlToDB;
+}
+function getSQLiteUrltoScripts(): URL {
+	return pathToFileURL(path.join(__dirname, "database"));
+}
+
+describe.skip("SQLite Migration Database", function () {
+	beforeEach(async function () {
+		const pathTodb = fileURLToPath(getSQLiteUrltoDb());
+		if (fs.existsSync(pathTodb)) {
+			await fs.unlinkSync(pathTodb);
+		}
+	});
+	it("Migration database", async function () {
+		const sqlProviderFactory = new lib.SqliteProviderFactory(getSQLiteUrltoDb());
+		await sqlProviderFactory.migration(DUMMY_CANCELLATION_TOKEN, getSQLiteUrltoScripts(), 0, 3);
+		const db = await sqlProviderFactory.create(DUMMY_CANCELLATION_TOKEN);
+		try {
+			const sqlData = await db.statement("SELECT 1;").executeScalar(DUMMY_CANCELLATION_TOKEN);
+			assert.equal(sqlData.asNumber, 1);
+		} finally {
+			await db.dispose();
+		}
+	});
+});

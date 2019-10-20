@@ -5,8 +5,9 @@ import { HttpClient } from "@zxteam/http-client";
 import { DUMMY_CANCELLATION_TOKEN } from "@zxteam/cancellation";
 import * as sqlite from "sqlite3";
 import * as fs from "fs";
+import * as path from "path";
 import { promisify } from "util";
-import { URL, fileURLToPath, pathToFileURL } from "url";
+import { URL, fileURLToPath } from "url";
 
 import * as contract from "@zxteam/sql";
 
@@ -152,7 +153,7 @@ export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactor
 		const listVersions: Array<string> = helpers.getDirectories(pathToScripts);
 
 		for (const version of listVersions) {
-			const urlVersion: URL = new URL(pathToFileURL + version);
+			const urlVersion: URL = new URL(pathToScripts + "/" + version);
 			const listFilesExsist: Array<string> = helpers.getFiles(urlVersion);
 			const isValidStructure: boolean = helpers.isValidStructure(listFilesExsist);
 
@@ -165,12 +166,12 @@ export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactor
 			const loadListVersions: Array<string> = helpers.isVerificationVersion(listVersions, currVersion, futVersion);
 			if (loadListVersions.length > 0) {
 				for (const version of loadListVersions) {
-					const urlVersion: URL = new URL(pathToFileURL + version);
+					const urlVersion: URL = new URL(pathToScripts + "/" + version);
 					const listFilesExsist: Array<string> = helpers.getFiles(urlVersion);
 
 					if (listFilesExsist.includes(fileScripts.INIT)) {
 						this._logger.trace(`First step run ${fileScripts.INIT} in version ${version}`);
-						const initScriptUrl = new URL(urlVersion + fileScripts.INIT);
+						const initScriptUrl = new URL(urlVersion + "/" + "init.sql");
 						await helpers.initalizeDatabaseByScript(cancellationToken, initScriptUrl, db, this._logger);
 					}
 
@@ -765,7 +766,11 @@ namespace helpers {
 		return fs.readdirSync(folder);
 	}
 	export function isValidStructure(listOfFiles: Array<string>): boolean {
-		const listFiles = [fileScripts.INIT, fileScripts.MIGRATION, fileScripts.FINALIZE];
+		const listFiles = [
+			"init.sql",
+			"migration.js",
+			"finalize.sql"
+		];
 		if (listOfFiles.length > 0) {
 			for (const file of listOfFiles) {
 				if (listFiles.includes(file as any)) {
