@@ -13,7 +13,7 @@ Provides SQLite implementation for `EmbeddedSqlProviderFactory` interface define
 
 ## Functions
 ### migration
-```
+```typescript
 import { DUMMY_CANCELLATION_TOKEN } from "@zxteam/cancellation";
 import { migration } from "@zxteam/sql-sqlite";
 
