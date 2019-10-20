@@ -8,7 +8,8 @@
 ## Interfaces
 
 ## Classes
-### SqliteProviderFactory - Provides SQLite implementation for `EmbeddedSqlProviderFactory` interface defined in [`@zxteam/sql` contact package](https://github.com/zxteamorg/node.sql)
+### SqliteProviderFactory
+Provides SQLite implementation for `EmbeddedSqlProviderFactory` interface defined in [`@zxteam/sql` contact package](https://github.com/zxteamorg/node.sql)
 
 ## Functions
 ### migration
