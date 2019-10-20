@@ -56,8 +56,15 @@ describe.skip("SQLite Migration Database", function () {
 		await sqlProviderFactory.migration(DUMMY_CANCELLATION_TOKEN, getSQLiteUrltoScripts(), 0, 3);
 		const db = await sqlProviderFactory.create(DUMMY_CANCELLATION_TOKEN);
 		try {
-			const sqlData = await db.statement("SELECT 1;").executeScalar(DUMMY_CANCELLATION_TOKEN);
-			assert.equal(sqlData.asNumber, 1);
+			const resultArray = await db
+				.statement("SELECT varcharValue, intValue FROM tb_1")
+				.executeQuery(DUMMY_CANCELLATION_TOKEN);
+
+			assert.instanceOf(resultArray, Array);
+			assert.equal(resultArray.length, 3);
+			assert.equal(resultArray[0].get("varcharValue").asString, "one");
+			assert.equal(resultArray[1].get("varcharValue").asString, "two");
+			assert.equal(resultArray[2].get("varcharValue").asString, "three");
 		} finally {
 			await db.dispose();
 		}

@@ -169,20 +169,20 @@ export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactor
 					const urlVersion: URL = new URL(pathToScripts + "/" + version);
 					const listFilesExsist: Array<string> = helpers.getFiles(urlVersion);
 
-					if (listFilesExsist.includes(fileScripts.INIT)) {
-						this._logger.trace(`First step run ${fileScripts.INIT} in version ${version}`);
+					if (listFilesExsist.includes("init.sql")) {
+						this._logger.trace(`First step run "init.sql" in version ${version}`);
 						const initScriptUrl = new URL(urlVersion + "/" + "init.sql");
 						await helpers.initalizeDatabaseByScript(cancellationToken, initScriptUrl, db, this._logger);
 					}
 
-					if (listFilesExsist.includes(fileScripts.MIGRATION)) {
-						this._logger.trace(`Second step run ${fileScripts.MIGRATION} in version ${version}`);
+					if (listFilesExsist.includes("migration.js")) {
+						this._logger.trace(`Second step run "migration.js" in version ${version}`);
 
 					}
 
-					if (listFilesExsist.includes(fileScripts.FINALIZE)) {
-						this._logger.trace(`Third step run ${fileScripts.FINALIZE} in version ${version}`);
-						const initScriptUrl = new URL(urlVersion + fileScripts.FINALIZE);
+					if (listFilesExsist.includes("finalize.sql")) {
+						this._logger.trace(`Third step run "finalize.sql" in version ${version}`);
+						const initScriptUrl = new URL(urlVersion + "/" + "finalize.sql");
 						await helpers.initalizeDatabaseByScript(cancellationToken, initScriptUrl, db, this._logger);
 					}
 				}
