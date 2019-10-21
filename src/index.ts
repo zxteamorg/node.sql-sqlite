@@ -7,7 +7,7 @@ import * as sqlite from "sqlite3";
 import * as fs from "fs";
 import * as path from "path";
 import { promisify } from "util";
-import { URL, fileURLToPath } from "url";
+import { URL, fileURLToPath, pathToFileURL } from "url";
 
 import * as contract from "@zxteam/sql";
 
@@ -129,32 +129,36 @@ export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactor
 		}
 	}
 
-	public async migration(cancellationToken: CancellationToken, pathToScripts: URL, currVersion: number, futVersion: number): Promise<void> {
+	public async migration(
+		cancellationToken: CancellationToken, migrationFilesRootPath: string, targetVersion?: string
+	): Promise<void> {
 		this._logger.trace("Inside migration()");
 
 		if (this._logger.isTraceEnabled) {
 			this._logger.trace(`Check is file ${this._url} exists`);
 		}
 
-		const dbPath = fileURLToPath(this._url);
-		const isExist = await existsAsync(dbPath);
-		if (!isExist) {
-			if (this._logger.isTraceEnabled) {
-				this._logger.trace(`The file ${this._url} don't already exists.`);
-			}
-			this.newDatabase(cancellationToken);
+		// const dbPath = fileURLToPath(this._url);
+		// const isExist = await existsAsync(dbPath);
+		// if (!isExist) {
+		// 	if (this._logger.isTraceEnabled) {
+		// 		this._logger.trace(`The file ${this._url} don't already exists.`);
+		// 	}
+		// 	this.newDatabase(cancellationToken);
+		// }
+		if (!await this.isDatabaseExists(cancellationToken)) {
+			cancellationToken.throwIfCancellationRequested();
+			await this.newDatabase(cancellationToken);
+			cancellationToken.throwIfCancellationRequested();
 		}
 
-		this._logger.trace("Check cancellationToken for interrupt");
-		cancellationToken.throwIfCancellationRequested();
-
-
 		this._logger.trace("Check structure folder");
-		const listVersions: Array<string> = helpers.getDirectories(pathToScripts);
+		const listVersions: ReadonlyArray<string> = helpers.getDirectories(migrationFilesRootPath);
 
 		for (const version of listVersions) {
-			const urlVersion: URL = new URL(pathToScripts + "/" + version);
-			const listFilesExsist: Array<string> = helpers.getFiles(urlVersion);
+			//const urlVersion: URL = new URL(pathToScripts + "/" + version);
+			const versionDirectory = path.join(migrationFilesRootPath, version);
+			const listFilesExsist: ReadonlyArray<string> = helpers.getFiles(versionDirectory);
 			const isValidStructure: boolean = helpers.isValidStructure(listFilesExsist);
 
 			if (!isValidStructure) { throw new Error("Invalid structure files"); }
@@ -163,27 +167,33 @@ export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactor
 		this._logger.trace("Open SQLite database for non-exsting file");
 		const db = await helpers.openDatabase(this._url);
 		try {
-			const loadListVersions: Array<string> = helpers.isVerificationVersion(listVersions, currVersion, futVersion);
+			const loadListVersions: Array<string> = helpers.excludeNonMigratonDrectories(listVersions, currVersion, futVersion);
 			if (loadListVersions.length > 0) {
 				for (const version of loadListVersions) {
-					const urlVersion: URL = new URL(pathToScripts + "/" + version);
-					const listFilesExsist: Array<string> = helpers.getFiles(urlVersion);
+					//const urlVersion: URL = new URL(pathToScripts + "/" + version);
+					const versionDirectory = path.join(migrationFilesRootPath, version);
+					const listFilesExsist: Array<string> = helpers.getFiles(versionDirectory);
 
-					if (listFilesExsist.includes("init.sql")) {
-						this._logger.trace(`First step run "init.sql" in version ${version}`);
-						const initScriptUrl = new URL(urlVersion + "/" + "init.sql");
+					if (listFilesExsist.includes(fileScripts.INIT)) {
+						this._logger.trace(`First step run "${fileScripts.INIT}" in version ${version}`);
+						//const initScriptUrl = new URL(urlVersion + "/" + "init.sql");
+						const initScriptFile = path.join(versionDirectory, fileScripts.INIT);
+						const initScriptUrl = pathToFileURL(initScriptFile);
 						await helpers.initalizeDatabaseByScript(cancellationToken, initScriptUrl, db, this._logger);
 					}
 
-					if (listFilesExsist.includes("migration.js")) {
-						this._logger.trace(`Second step run "migration.js" in version ${version}`);
-
+					if (listFilesExsist.includes(fileScripts.MIGRATION)) {
+						this._logger.trace(`Second step run "${fileScripts.MIGRATION}" in version ${version}`);
+						this._logger.fatal("Appling migration javascript not implemented yet");
+						throw new Error("Appling migration javascript not implemented yet");
 					}
 
-					if (listFilesExsist.includes("finalize.sql")) {
-						this._logger.trace(`Third step run "finalize.sql" in version ${version}`);
-						const initScriptUrl = new URL(urlVersion + "/" + "finalize.sql");
-						await helpers.initalizeDatabaseByScript(cancellationToken, initScriptUrl, db, this._logger);
+					if (listFilesExsist.includes(fileScripts.FINALIZE)) {
+						this._logger.trace(`Third step run "${fileScripts.FINALIZE}" in version ${version}`);
+						// const initScriptUrl = new URL(urlVersion + "/" + "finalize.sql");
+						const finalizeScriptFile = path.join(versionDirectory, fileScripts.FINALIZE);
+						const finalizeScriptUrl = pathToFileURL(finalizeScriptFile);
+						await helpers.initalizeDatabaseByScript(cancellationToken, finalizeScriptUrl, db, this._logger);
 					}
 				}
 			}
@@ -757,19 +767,19 @@ namespace helpers {
 			}
 		}
 	}
-	export function getDirectories(source: URL): Array<string> {
-		return fs.readdirSync(source, { withFileTypes: true })
+	export function getDirectories(folder: string): Array<string> {
+		return fs.readdirSync(folder, { withFileTypes: true })
 			.filter(dirent => dirent.isDirectory())
 			.map(dirent => dirent.name);
 	}
-	export function getFiles(folder: URL): Array<string> {
+	export function getFiles(folder: string): Array<string> {
 		return fs.readdirSync(folder);
 	}
-	export function isValidStructure(listOfFiles: Array<string>): boolean {
+	export function isValidStructure(listOfFiles: ReadonlyArray<string>): boolean {
 		const listFiles = [
-			"init.sql",
-			"migration.js",
-			"finalize.sql"
+			fileScripts.INIT,
+			fileScripts.MIGRATION,
+			fileScripts.FINALIZE
 		];
 		if (listOfFiles.length > 0) {
 			for (const file of listOfFiles) {
@@ -780,7 +790,9 @@ namespace helpers {
 		}
 		return false;
 	}
-	export function isVerificationVersion(listVersions: Array<string>, currVersion: number, futVersion: number): Array<string> {
+	export function excludeNonMigratonDrectories(
+		listVersions: ReadonlyArray<string>, currVersion: number, futVersion: number
+	): Array<string> {
 		const friendly: Array<string> = [];
 
 		for (let version = currVersion; version <= futVersion; ++version) {
@@ -866,7 +878,7 @@ namespace helpers {
 	}
 }
 
-declare enum fileScripts {
+const enum fileScripts {
 	INIT = "init.sql",
 	MIGRATION = "migration.js",
 	FINALIZE = "finalize.sql"

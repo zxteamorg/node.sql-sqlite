@@ -62,7 +62,11 @@ async function run() {
 				let command = "";
 				let executionChain = Promise.resolve();
 				for (let i = 0; i < lines.length; i++) {
-					const line = lines[i];
+					let line = lines[i];
+					while (line.endsWith("\r")) {
+						line = line.substring(0, line.length - 1);
+					}
+
 
 					if (!((!line) || line.startsWith("--"))) {
 						command += line;

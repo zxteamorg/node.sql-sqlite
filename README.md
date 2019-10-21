@@ -20,7 +20,9 @@ import { migration } from "@zxteam/sql-sqlite";
 const dbURL: URL = new URL("file:///path/to/db.sql");
 const migrationFilesRootPath: string = './database/';
 
-await migration(DUMMY_CANCELLATION_TOKEN, dbURL, migrationFilesRootPath /*, targetVersion*/ ); // targetVersion is optional, if ommited, the migration update DB to latest version
+const sqlProviderFactory = new SqliteProviderFactory(dbURL);
+
+await sqlProviderFactory.migration(DUMMY_CANCELLATION_TOKEN, migrationFilesRootPath /*, targetVersion*/ ); // targetVersion is optional, if ommited, the migration update DB to latest version
 ```
 
 
@@ -44,13 +46,4 @@ The files inside version are optional, but at least one file should present.
 To detect DB version, the `Migration` is used table with name `version` inside your DB. So do not create a table with same name to prevent conflicts.
 
 #### Update DB
-
-```
-import { DUMMY_CANCELLATION_TOKEN } from "@zxteam/cancellation";
-import { migration } from "@zxteam/sql-sqlite";
-
-const dbURL: URL = new URL("file:///path/to/db.sql");
-const migrationFilesRootPath: string = './database/';
-
-await migration(DUMMY_CANCELLATION_TOKEN, dbURL, migrationFilesRootPath /*, targetVersion*/ ); // targetVersion is optional, if ommited, the migration update DB to latest version
-```
+TBD
