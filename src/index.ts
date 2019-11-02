@@ -6,6 +6,7 @@ import { DUMMY_CANCELLATION_TOKEN } from "@zxteam/cancellation";
 import * as sqlite from "sqlite3";
 import * as fs from "fs";
 import * as path from "path";
+import * as semver from "semver";
 import { promisify } from "util";
 import { URL, fileURLToPath, pathToFileURL } from "url";
 
@@ -138,14 +139,6 @@ export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactor
 			this._logger.trace(`Check is file ${this._url} exists`);
 		}
 
-		// const dbPath = fileURLToPath(this._url);
-		// const isExist = await existsAsync(dbPath);
-		// if (!isExist) {
-		// 	if (this._logger.isTraceEnabled) {
-		// 		this._logger.trace(`The file ${this._url} don't already exists.`);
-		// 	}
-		// 	this.newDatabase(cancellationToken);
-		// }
 		if (!await this.isDatabaseExists(cancellationToken)) {
 			cancellationToken.throwIfCancellationRequested();
 			await this.newDatabase(cancellationToken);
@@ -156,7 +149,6 @@ export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactor
 		const listVersions: ReadonlyArray<string> = helpers.getDirectories(migrationFilesRootPath);
 
 		for (const version of listVersions) {
-			//const urlVersion: URL = new URL(pathToScripts + "/" + version);
 			const versionDirectory = path.join(migrationFilesRootPath, version);
 			const listFilesExsist: ReadonlyArray<string> = helpers.getFiles(versionDirectory);
 			const isValidStructure: boolean = helpers.isValidStructure(listFilesExsist);
@@ -167,16 +159,15 @@ export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactor
 		this._logger.trace("Open SQLite database for non-exsting file");
 		const db = await helpers.openDatabase(this._url);
 		try {
-			const loadListVersions: Array<string> = helpers.excludeNonMigratonDrectories(listVersions, currVersion, futVersion);
+			const currentVersion: string = await helpers.getCurrentVersionOndb(db);
+			const loadListVersions: Array<string> = helpers.excludeNonMigratonDrectories(listVersions, currentVersion, targetVersion);
 			if (loadListVersions.length > 0) {
 				for (const version of loadListVersions) {
-					//const urlVersion: URL = new URL(pathToScripts + "/" + version);
 					const versionDirectory = path.join(migrationFilesRootPath, version);
 					const listFilesExsist: Array<string> = helpers.getFiles(versionDirectory);
 
 					if (listFilesExsist.includes(fileScripts.INIT)) {
 						this._logger.trace(`First step run "${fileScripts.INIT}" in version ${version}`);
-						//const initScriptUrl = new URL(urlVersion + "/" + "init.sql");
 						const initScriptFile = path.join(versionDirectory, fileScripts.INIT);
 						const initScriptUrl = pathToFileURL(initScriptFile);
 						await helpers.initalizeDatabaseByScript(cancellationToken, initScriptUrl, db, this._logger);
@@ -190,7 +181,6 @@ export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactor
 
 					if (listFilesExsist.includes(fileScripts.FINALIZE)) {
 						this._logger.trace(`Third step run "${fileScripts.FINALIZE}" in version ${version}`);
-						// const initScriptUrl = new URL(urlVersion + "/" + "finalize.sql");
 						const finalizeScriptFile = path.join(versionDirectory, fileScripts.FINALIZE);
 						const finalizeScriptUrl = pathToFileURL(finalizeScriptFile);
 						await helpers.initalizeDatabaseByScript(cancellationToken, finalizeScriptUrl, db, this._logger);
@@ -791,17 +781,36 @@ namespace helpers {
 		return false;
 	}
 	export function excludeNonMigratonDrectories(
-		listVersions: ReadonlyArray<string>, currVersion: number, futVersion: number
+		listVersions: ReadonlyArray<string>,
+		currentVersion: string,
+		targetVersion?: string
 	): Array<string> {
-		const friendly: Array<string> = [];
+		const friendlyVersions: Array<string> = [];
 
-		for (let version = currVersion; version <= futVersion; ++version) {
-			const strVersion = version.toString();
-			const isExist = listVersions.includes(strVersion);
-
-			if (isExist) { friendly.push(strVersion); }
+		for (const version of listVersions) {
+			if (semver.lt(currentVersion, version)) {
+				if (targetVersion) {
+					if (semver.gte(targetVersion, version)) {
+						friendlyVersions.push(version);
+					}
+				} else {
+					friendlyVersions.push(version);
+				}
+			}
 		}
-		return friendly;
+		return friendlyVersions;
+	}
+	export async function getCurrentVersionOndb(db: sqlite.Database): Promise<string> {
+		try {
+			const version = await sqlFetch(db, "SELECT version_number FROM version ORDER BY version_number DESC LIMIT 1");
+			return version[0];
+		} catch (e) {
+			if (e.message === "SQLITE_ERROR: no such table: version") {
+				return "0.0.0";
+			} else {
+				throw new Error(e.message);
+			}
+		}
 	}
 
 	function unwrapSqlAndParams(sql: string, params?: Array<any>): [string, Array<any>] {

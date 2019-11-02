@@ -40,8 +40,8 @@ function getSQLiteUrltoDb(): URL {
 	const urlToDB = pathToFileURL(pathToDB);
 	return urlToDB;
 }
-function getSQLiteUrltoScripts(): URL {
-	return pathToFileURL(path.join(__dirname, "database"));
+function getSQLiteUrltoScripts(): string {
+	return path.join(__dirname, "database");
 }
 
 describe("SQLite Migration Database", function () {
@@ -53,7 +53,7 @@ describe("SQLite Migration Database", function () {
 	});
 	it("Migration database", async function () {
 		const sqlProviderFactory = new lib.SqliteProviderFactory(getSQLiteUrltoDb());
-		await sqlProviderFactory.migration(DUMMY_CANCELLATION_TOKEN, getSQLiteUrltoScripts(), 0, 3);
+		await sqlProviderFactory.migration(DUMMY_CANCELLATION_TOKEN, getSQLiteUrltoScripts(), undefined);
 		const db = await sqlProviderFactory.create(DUMMY_CANCELLATION_TOKEN);
 		try {
 			const resultArray = await db

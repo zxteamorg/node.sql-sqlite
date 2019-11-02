@@ -24,6 +24,7 @@
 	"devDependencies": {
 		"@types/chai-datetime": "^0.0.33",
 		"@types/sqlite3": "^3.1.5",
+		"@types/semver": "^6.2.0",
 		"@zxnode/build": "^0.0.34",
 		"chai-datetime": "^1.5.0",
 		"husky": "^3.0.9"
@@ -36,6 +37,7 @@
 		"@zxteam/financial": "^6.0.21",
 		"@zxteam/http-client": "^6.0.23",
 		"@zxteam/sql": "^6.0.23",
+		"semver": "^6.3.0",
 		"sqlite3": "^4.1.0"
 	},
 	"keywords": [
