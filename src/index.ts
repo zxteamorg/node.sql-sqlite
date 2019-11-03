@@ -6,7 +6,6 @@ import { DUMMY_CANCELLATION_TOKEN } from "@zxteam/cancellation";
 import * as sqlite from "sqlite3";
 import * as fs from "fs";
 import * as path from "path";
-import * as semver from "semver";
 import { promisify } from "util";
 import { URL, fileURLToPath, pathToFileURL } from "url";
 
@@ -146,7 +145,7 @@ export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactor
 		}
 
 		this._logger.trace("Check structure folder");
-		const listVersions: ReadonlyArray<string> = helpers.getDirectories(migrationFilesRootPath);
+		const listVersions: Array<string> = helpers.getDirectories(migrationFilesRootPath);
 
 		for (const version of listVersions) {
 			const versionDirectory = path.join(migrationFilesRootPath, version);
@@ -158,9 +157,19 @@ export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactor
 
 		this._logger.trace("Open SQLite database for non-exsting file");
 		const db = await helpers.openDatabase(this._url);
+		const sqlProvider = new SQLiteProvider(db, async () => { return; }, this._financialOperation, this._logger);
 		try {
-			const currentVersion: string = await helpers.getCurrentVersionOndb(db);
-			const loadListVersions: Array<string> = helpers.excludeNonMigratonDrectories(listVersions, currentVersion, targetVersion);
+
+			const currentVersion: string | undefined = await helpers.getCurrentVersionOnDb(sqlProvider);
+			if (!currentVersion) {
+				const isCleanDatabase = await helpers.isCleanDatabase(sqlProvider);
+				if (!isCleanDatabase) {
+					throw new Error("Don't found table 'version' and database is not empty.");
+				}
+			}
+
+			const loadListVersions: Array<string> = helpers.excludeNonMigratonDrectories(listVersions, { currentVersion, targetVersion });
+
 			if (loadListVersions.length > 0) {
 				for (const version of loadListVersions) {
 					const versionDirectory = path.join(migrationFilesRootPath, version);
@@ -187,9 +196,11 @@ export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactor
 					}
 				}
 			}
+
 		} finally {
 			this._logger.trace("Close SQLite database");
 			await helpers.closeDatabase(db);
+			await sqlProvider.dispose();
 		}
 	}
 }
@@ -781,36 +792,67 @@ namespace helpers {
 		return false;
 	}
 	export function excludeNonMigratonDrectories(
-		listVersions: ReadonlyArray<string>,
-		currentVersion: string,
-		targetVersion?: string
+		listVersions: Array<string>,
+		v: {
+			currentVersion: string | undefined;
+			targetVersion: string | undefined;
+		}
 	): Array<string> {
-		const friendlyVersions: Array<string> = [];
 
-		for (const version of listVersions) {
-			if (semver.lt(currentVersion, version)) {
-				if (targetVersion) {
-					if (semver.gte(targetVersion, version)) {
+		const composeTargetVersion = (version: string): boolean => {
+			if (v.targetVersion) {
+				if (v.targetVersion >= version) {
+					return true;
+				} else {
+					return false;
+				}
+			} else {
+				return true;
+			}
+		};
+
+		const friendlyVersions: Array<string> = [];
+		const versions = listVersions.sort();
+		for (const version of versions) {
+			if (v.currentVersion) {
+				if (v.currentVersion < version) {
+					if (composeTargetVersion(version)) {
 						friendlyVersions.push(version);
 					}
-				} else {
+				}
+			} else {
+				if (composeTargetVersion(version)) {
 					friendlyVersions.push(version);
 				}
 			}
 		}
-		return friendlyVersions;
+
+		return friendlyVersions.sort();
 	}
-	export async function getCurrentVersionOndb(db: sqlite.Database): Promise<string> {
+	export async function getCurrentVersionOnDb(provider: SQLiteProvider): Promise<string | undefined> {
 		try {
-			const version = await sqlFetch(db, "SELECT version_number FROM version ORDER BY version_number DESC LIMIT 1");
-			return version[0];
-		} catch (e) {
-			if (e.message === "SQLITE_ERROR: no such table: version") {
-				return "0.0.0";
-			} else {
-				throw new Error(e.message);
-			}
+
+			const exsistTable = await provider
+				.statement("SELECT name FROM sqlite_master WHERE type='table' AND name='version'")
+				.executeScalarOrNull(DUMMY_CANCELLATION_TOKEN);
+
+			if (!exsistTable) { return undefined; }
+
+			const version = await provider
+				.statement("SELECT version_number FROM version ORDER BY version_number DESC LIMIT 1")
+				.executeScalar(DUMMY_CANCELLATION_TOKEN);
+
+			return version.asString;
+		} catch (error) {
+			throw error;
 		}
+	}
+	export async function isCleanDatabase(provider: SQLiteProvider): Promise<boolean> {
+		const exsistTable = await provider
+			.statement("SELECT name FROM sqlite_master WHERE type='table'")
+			.executeQuery(DUMMY_CANCELLATION_TOKEN);
+
+		return exsistTable.length ? false : true;
 	}
 
 	function unwrapSqlAndParams(sql: string, params?: Array<any>): [string, Array<any>] {
