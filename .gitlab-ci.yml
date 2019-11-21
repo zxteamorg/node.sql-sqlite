@@ -1,6 +1,6 @@
-include: 'https://dev.zxteam.net/maxim.anurin/gitlab-pipelines/raw/master/node/internal-lib.yml'
+include: 'http://dev.zxteam.net/maxim.anurin/gitlab-pipelines/raw/master/node/internal-lib.yml'
 
-image: registry.dev.zxteam.net/pub/docker/build/node10.protoc-mysqlcli-psqlcli:1
+image: docker.registry.zxteam.net/pub/docker/build/node10.protoc-mysqlcli-psqlcli:1
 
 cache:
   paths:
