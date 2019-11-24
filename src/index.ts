@@ -3,12 +3,17 @@ import { Disposable, Initable } from "@zxteam/disposable";
 import { financial, FinancialOperation } from "@zxteam/financial";
 import { HttpClient } from "@zxteam/http-client";
 import { DUMMY_CANCELLATION_TOKEN } from "@zxteam/cancellation";
+import * as contract from "@zxteam/sql";
+
 import * as sqlite from "sqlite3";
 import * as fs from "fs";
 import { promisify } from "util";
 import { URL, fileURLToPath, pathToFileURL } from "url";
+import { EOL } from "os";
 
-import * as contract from "@zxteam/sql";
+import * as stream from "stream";
+import * as readline from "readline";
+import { once } from "events";
 
 const existsAsync = promisify(fs.exists);
 const readFileAsync = promisify(fs.readFile);
@@ -752,22 +757,22 @@ namespace helpers {
 
 	async function loadScriptAndParseScript(cancellationToken: CancellationToken, urlPath: URL): Promise<Array<string>> {
 		const sqlScriptContent = await loadScript(cancellationToken, urlPath);
-		const sqlCommands = parseCommands(sqlScriptContent);
+		const sqlCommands = await splitScriptToStatements(sqlScriptContent);
 		return sqlCommands;
 	}
 	function loadScript(cancellationToken: CancellationToken, urlPath: URL): Promise<string> {
 		if (urlPath.protocol === "file:") {
 			const initScriptPath = fileURLToPath(urlPath);
 			return loadScriptFromFile(cancellationToken, initScriptPath);
-		} else if (urlPath.protocol === "http:") {
-			return loadScriptFromHttp(cancellationToken, urlPath);
+		} else if (urlPath.protocol === "http:" || urlPath.protocol === "https:") {
+			return loadScriptFromWeb(cancellationToken, urlPath);
 		}
 		throw new Error(`Do not support this protocol: ${urlPath.protocol}`);
 	}
 	async function loadScriptFromFile(cancellationToken: CancellationToken, filename: string): Promise<string> {
 		return readFileAsync(filename, "utf8");
 	}
-	async function loadScriptFromHttp(cancellationToken: CancellationToken, urlPath: URL): Promise<string> {
+	async function loadScriptFromWeb(cancellationToken: CancellationToken, urlPath: URL): Promise<string> {
 		const httpClient = new HttpClient();
 		const invokeResponse = await httpClient.invoke(cancellationToken, { url: urlPath, method: "GET" });
 
@@ -777,20 +782,54 @@ namespace helpers {
 
 		return invokeResponse.body.toString("utf8");
 	}
-	function parseCommands(commands: string): Array<string> {
-		const lines = commands.split("\n");
-		let allCommands = [];
+	async function splitScriptToStatements(sqlScriptContent: string): Promise<Array<string>> {
+		const allCommands: Array<string> = [];
+		const sqlScriptContentStream = new StringReadable(sqlScriptContent);
+		const readlineInterface = readline.createInterface({
+			input: sqlScriptContentStream,
+			crlfDelay: Infinity
+		});
+
 		let command = "";
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
-			if (!((!line) || line.startsWith("--"))) {
-				command += line;
-				if (command.endsWith(";")) {
+		readlineInterface.on("line", function (line: string) {
+			if (line.startsWith("--")) {
+				if (line.startsWith("-- GO")) {
 					allCommands.push(command);
 					command = "";
 				}
+			} else {
+				command = `${command}${line}${EOL}`;
+			}
+		});
+
+		await once(readlineInterface, "close");
+
+		if (command.length > 0) {
+			allCommands.push(command);
+		}
+
+		return allCommands;
+	}
+
+	class StringReadable extends stream.Readable {
+		private _data: Buffer | null;
+
+		public constructor(str: string) {
+			super();
+			this._data = Buffer.from(str);
+		}
+
+		public _read(size: number): void {
+			if (this._data !== null) {
+				const chunk: Buffer = this._data.slice(0, size);
+				this._data = this._data.slice(chunk.length);
+				this.push(chunk);
+				if (this._data.length === 0) {
+					this._data = null;
+				}
+			} else {
+				this.push(null);
 			}
 		}
-		return allCommands;
 	}
 }

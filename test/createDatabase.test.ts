@@ -83,6 +83,9 @@ describe("SQLite Create Database", function () {
 		const db = await sqlProviderFactory.create(DUMMY_CANCELLATION_TOKEN);
 		try {
 			const arraySqlData = await db.statement("SELECT varcharValue, intValue FROM 'tb_1';").executeQuery(DUMMY_CANCELLATION_TOKEN);
+
+			assert.equal(arraySqlData.length, 3);
+
 			assert.equal(arraySqlData[0].get("varcharValue").asString, "one");
 			assert.equal(arraySqlData[1].get("varcharValue").asString, "two");
 			assert.equal(arraySqlData[2].get("varcharValue").asString, "three");
@@ -105,6 +108,9 @@ describe("SQLite Create Database", function () {
 			try {
 				const arraySqlData = await db.statement("SELECT varcharValue, intValue FROM 'tb_1';")
 					.executeQuery(DUMMY_CANCELLATION_TOKEN);
+
+				assert.equal(arraySqlData.length, 3);
+
 				assert.equal(arraySqlData[0].get("varcharValue").asString, "one");
 				assert.equal(arraySqlData[1].get("varcharValue").asString, "two");
 				assert.equal(arraySqlData[2].get("varcharValue").asString, "three");
