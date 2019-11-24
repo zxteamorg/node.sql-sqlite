@@ -790,15 +790,22 @@ namespace helpers {
 			crlfDelay: Infinity
 		});
 
-		let command = "";
+		let statement = "";
 		readlineInterface.on("line", function (line: string) {
 			if (line.startsWith("--")) {
 				if (line.startsWith("-- GO")) {
-					allCommands.push(command);
-					command = "";
+					const trimmedStatement = statement.trim();
+					if (trimmedStatement.length > 0) {
+						allCommands.push(statement);
+					}
+					statement = "";
 				}
 			} else {
-				command = `${command}${line}${EOL}`;
+				if (statement.length > 0) {
+					statement = `${statement}${EOL}${line}`;
+				} else {
+					statement = `${statement}${line}`;
+				}
 			}
 		});
 
@@ -818,8 +825,8 @@ namespace helpers {
 			cancellationToken.addCancelListener(cancel);
 		});
 
-		if (command.length > 0) {
-			allCommands.push(command);
+		if (statement.length > 0) {
+			allCommands.push(statement);
 		}
 
 		return allCommands;

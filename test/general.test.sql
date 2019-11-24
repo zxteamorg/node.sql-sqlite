@@ -1,3 +1,4 @@
+-- GO
 -- DROP TABLE IF EXISTS [tb_1];
 CREATE TABLE [tb_1] (
 	[varcharValue] VARCHAR(128) NOT NULL,
