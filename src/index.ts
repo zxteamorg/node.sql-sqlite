@@ -1,5 +1,6 @@
 import { CancellationToken, Financial, Logger } from "@zxteam/contract";
 import { Disposable, Initable } from "@zxteam/disposable";
+import { CancelledError } from "@zxteam/errors";
 import { financial, FinancialOperation } from "@zxteam/financial";
 import { HttpClient } from "@zxteam/http-client";
 import { DUMMY_CANCELLATION_TOKEN } from "@zxteam/cancellation";
@@ -13,7 +14,6 @@ import { EOL } from "os";
 
 import * as stream from "stream";
 import * as readline from "readline";
-import { once } from "events";
 
 const existsAsync = promisify(fs.exists);
 const readFileAsync = promisify(fs.readFile);
@@ -757,7 +757,7 @@ namespace helpers {
 
 	async function loadScriptAndParseScript(cancellationToken: CancellationToken, urlPath: URL): Promise<Array<string>> {
 		const sqlScriptContent = await loadScript(cancellationToken, urlPath);
-		const sqlCommands = await splitScriptToStatements(sqlScriptContent);
+		const sqlCommands = await splitScriptToStatements(cancellationToken, sqlScriptContent);
 		return sqlCommands;
 	}
 	function loadScript(cancellationToken: CancellationToken, urlPath: URL): Promise<string> {
@@ -782,7 +782,7 @@ namespace helpers {
 
 		return invokeResponse.body.toString("utf8");
 	}
-	async function splitScriptToStatements(sqlScriptContent: string): Promise<Array<string>> {
+	async function splitScriptToStatements(cancellationToken: CancellationToken, sqlScriptContent: string): Promise<Array<string>> {
 		const allCommands: Array<string> = [];
 		const sqlScriptContentStream = new StringReadable(sqlScriptContent);
 		const readlineInterface = readline.createInterface({
@@ -802,7 +802,21 @@ namespace helpers {
 			}
 		});
 
-		await once(readlineInterface, "close");
+		await new Promise(function (resolve, reject) {
+			function complete() {
+				resolve();
+				cancellationToken.removeCancelListener(cancel);
+				readlineInterface.removeListener("close", complete);
+			}
+			function cancel() {
+				reject(new CancelledError());
+				cancellationToken.removeCancelListener(cancel);
+				readlineInterface.removeListener("close", complete);
+			}
+
+			readlineInterface.on("close", complete);
+			cancellationToken.addCancelListener(cancel);
+		});
 
 		if (command.length > 0) {
 			allCommands.push(command);
