@@ -7,7 +7,7 @@ import { URL, fileURLToPath, pathToFileURL } from "url";
 import { CancellationToken } from "@zxteam/contract";
 import { financial } from "@zxteam/financial";
 import ensureFactory from "@zxteam/ensure";
-import { SqlProvider, EmbeddedSqlProviderFactory } from "@zxteam/sql";
+import { SqlProvider, EmbeddedSqlProviderFactory, SqlSyntaxError, SqlConstraintError } from "@zxteam/sql";
 
 import * as lib from "../src";
 
@@ -294,16 +294,16 @@ describe("SQLite Tests", function () {
 		assert.equal(resultArray.length, 0);
 	});
 	it("Call non-existing command execute", async function () {
+		let expectedError!: SqlSyntaxError;
 		try {
-			const resultArray = await getSqlProvider()
+			await getSqlProvider()
 				.statement("CALL `sp_non_existent`")
 				.executeQuery(DUMMY_CANCELLATION_TOKEN);
 		} catch (err) {
-			assert.containsAllKeys(err, ["code"]);
-			assert.equal((<any>err).code, "SQLITE_ERROR");
-			return;
+			expectedError = err;
 		}
-		assert.fail("No exceptions", "Exception with code: SQLITE_ERROR");
+		assert.isDefined(expectedError);
+		assert.instanceOf(expectedError, SqlSyntaxError);
 	});
 	it("Should be able to create temporary table", async function () {
 		const tempTable = await getSqlProvider().createTempTable(
@@ -437,6 +437,104 @@ describe("SQLite Tests", function () {
 			.executeScalarOrNull(DUMMY_CANCELLATION_TOKEN);
 
 		assert.isNull(executeResult);
+	});
+	it("execute should raise SqlSyntaxError for bad sql command", async function () {
+		let expectedError!: SqlSyntaxError;
+		try {
+			await getSqlProvider()
+				.statement("WRONG SQL COMMAND")
+				.execute(DUMMY_CANCELLATION_TOKEN);
+		} catch (e) {
+			expectedError = e;
+		}
+
+		assert.isDefined(expectedError);
+		assert.instanceOf(expectedError, SqlSyntaxError);
+		assert.isDefined(expectedError.innerError);
+	});
+	it("executeQuery should raise SqlSyntaxError for bad sql command", async function () {
+		let expectedError!: SqlSyntaxError;
+		try {
+			await getSqlProvider()
+				.statement("WRONG SQL COMMAND")
+				.executeQuery(DUMMY_CANCELLATION_TOKEN);
+		} catch (e) {
+			expectedError = e;
+		}
+
+		assert.isDefined(expectedError);
+		assert.instanceOf(expectedError, SqlSyntaxError);
+		assert.isDefined(expectedError.innerError);
+	});
+	it.skip("executeQueryMultiSets should raise SqlSyntaxError for bad sql command", async function () {
+		let expectedError!: SqlSyntaxError;
+		try {
+			await getSqlProvider()
+				.statement("WRONG SQL COMMAND")
+				.executeQueryMultiSets(DUMMY_CANCELLATION_TOKEN);
+		} catch (e) {
+			expectedError = e;
+		}
+
+		assert.isDefined(expectedError);
+		assert.instanceOf(expectedError, SqlSyntaxError);
+		assert.isDefined(expectedError.innerError);
+	});
+	it("executeScalar should raise SqlSyntaxError for bad sql command", async function () {
+		let expectedError!: SqlSyntaxError;
+		try {
+			await getSqlProvider()
+				.statement("WRONG SQL COMMAND")
+				.executeScalar(DUMMY_CANCELLATION_TOKEN);
+		} catch (e) {
+			expectedError = e;
+		}
+
+		assert.isDefined(expectedError);
+		assert.instanceOf(expectedError, SqlSyntaxError);
+		assert.isDefined(expectedError.innerError);
+	});
+	it("executeScalarOrNull should raise SqlSyntaxError for bad sql command", async function () {
+		let expectedError!: SqlSyntaxError;
+		try {
+			await getSqlProvider()
+				.statement("WRONG SQL COMMAND")
+				.executeScalarOrNull(DUMMY_CANCELLATION_TOKEN);
+		} catch (e) {
+			expectedError = e;
+		}
+
+		assert.isDefined(expectedError);
+		assert.instanceOf(expectedError, SqlSyntaxError);
+		assert.isDefined(expectedError.innerError);
+	});
+	it("executeSingle should raise SqlSyntaxError for bad sql command", async function () {
+		let expectedError!: SqlSyntaxError;
+		try {
+			await getSqlProvider()
+				.statement("WRONG SQL COMMAND")
+				.executeSingle(DUMMY_CANCELLATION_TOKEN);
+		} catch (e) {
+			expectedError = e;
+		}
+
+		assert.isDefined(expectedError);
+		assert.instanceOf(expectedError, SqlSyntaxError);
+		assert.isDefined(expectedError.innerError);
+	});
+	it("execute should raise SqlConstraintError for UNIQUE violation", async function () {
+		let expectedError!: SqlConstraintError;
+		try {
+			await getSqlProvider()
+				.statement("INSERT INTO tb_1 VALUES ('one', 1)")
+				.execute(DUMMY_CANCELLATION_TOKEN);
+		} catch (e) {
+			expectedError = e;
+		}
+
+		assert.isDefined(expectedError);
+		assert.instanceOf(expectedError, SqlConstraintError);
+		assert.isDefined(expectedError.innerError);
 	});
 });
 

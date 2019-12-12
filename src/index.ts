@@ -1,10 +1,13 @@
 import { CancellationToken, Financial, Logger } from "@zxteam/contract";
 import { Disposable, Initable } from "@zxteam/disposable";
-import { CancelledError } from "@zxteam/errors";
+import { CancelledError, AggregateError, wrapErrorIfNeeded } from "@zxteam/errors";
 import { financial, FinancialOperation } from "@zxteam/financial";
 import { HttpClient } from "@zxteam/http-client";
 import { DUMMY_CANCELLATION_TOKEN } from "@zxteam/cancellation";
-import * as contract from "@zxteam/sql";
+import {
+	EmbeddedSqlProviderFactory, SqlData, SqlDialect, SqlProvider,
+	SqlStatementParam, SqlResultRecord, SqlStatement, SqlTemporaryTable, SqlError, SqlSyntaxError, SqlConstraintError
+} from "@zxteam/sql";
 
 import * as sqlite from "sqlite3";
 import * as fs from "fs";
@@ -18,7 +21,7 @@ import * as readline from "readline";
 const existsAsync = promisify(fs.exists);
 const readFileAsync = promisify(fs.readFile);
 
-export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactory {
+export class SqliteProviderFactory implements EmbeddedSqlProviderFactory {
 	private readonly _financialOperation: FinancialOperation;
 	private readonly _logger: Logger;
 	private readonly _url: URL;
@@ -32,7 +35,7 @@ export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactor
 		this._logger.trace("SqliteProviderFactory Constructed");
 	}
 
-	public async create(cancellationToken: CancellationToken): Promise<contract.SqlProvider> {
+	public async create(cancellationToken: CancellationToken): Promise<SqlProvider> {
 		this._logger.trace("Inside create() ...");
 
 		if (this._logger.isTraceEnabled) {
@@ -59,7 +62,7 @@ export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactor
 			this._logger.trace("Check cancellationToken for interrupt");
 			cancellationToken.throwIfCancellationRequested();
 
-			const sqlProvider: contract.SqlProvider = new SQLiteProvider(
+			const sqlProvider: SqlProvider = new SQLiteProvider(
 				underlayingSqliteConnection,
 				() => helpers.closeDatabase(underlayingSqliteConnection),
 				this._financialOperation,
@@ -132,6 +135,57 @@ export class SqliteProviderFactory implements contract.EmbeddedSqlProviderFactor
 			}
 		}
 	}
+
+	public usingProvider<T>(
+		cancellationToken: CancellationToken,
+		worker: (sqlProvder: SqlProvider) => T | Promise<T>
+	): Promise<T> {
+		const executionPromise: Promise<T> = (async () => {
+			const sqlProvider: SqlProvider = await this.create(cancellationToken);
+			try {
+				return await worker(sqlProvider);
+			} finally {
+				await sqlProvider.dispose();
+			}
+		})();
+
+		// this._activeProviderUsings.add(executionPromise);
+
+		// executionPromise.catch(function () { /* BYPASS */ }).finally(() => {
+		// 	this._activeProviderUsings.delete(executionPromise);
+		// });
+
+		return executionPromise;
+	}
+
+	public usingProviderWithTransaction<T>(
+		cancellationToken: CancellationToken, worker: (sqlProvder: SqlProvider) => T | Promise<T>
+	): Promise<T> {
+		return this.usingProvider(cancellationToken, async (sqlProvider: SqlProvider) => {
+			await sqlProvider.statement("BEGIN TRANSACTION").execute(cancellationToken);
+			try {
+				let result: T;
+				const workerResult = worker(sqlProvider);
+				if (workerResult instanceof Promise) {
+					result = await workerResult;
+				} else {
+					result = workerResult;
+				}
+				// We have not to cancel this operation, so pass DUMMY_CANCELLATION_TOKEN
+				await sqlProvider.statement("COMMIT TRANSACTION").execute(DUMMY_CANCELLATION_TOKEN);
+				return result;
+			} catch (e) {
+				try {
+					// We have not to cancel this operation, so pass DUMMY_CANCELLATION_TOKEN
+					await sqlProvider.statement("ROLLBACK TRANSACTION").execute(DUMMY_CANCELLATION_TOKEN);
+				} catch (e2) {
+					throw new AggregateError([e, e2]);
+				}
+				throw e;
+			}
+		});
+	}
+
 }
 
 export default SqliteProviderFactory;
@@ -139,8 +193,8 @@ export default SqliteProviderFactory;
 class ArgumentError extends Error { }
 class InvalidOperationError extends Error { }
 
-class SQLiteProvider extends Disposable implements contract.SqlProvider {
-	public readonly dialect: contract.SqlDialect = contract.SqlDialect.SQLite;
+class SQLiteProvider extends Disposable implements SqlProvider {
+	public readonly dialect: SqlDialect = SqlDialect.SQLite;
 	public readonly sqliteConnection: sqlite.Database;
 	public readonly financialOperation: FinancialOperation;
 	private readonly _log: Logger;
@@ -163,7 +217,7 @@ class SQLiteProvider extends Disposable implements contract.SqlProvider {
 
 	public async createTempTable(
 		cancellationToken: CancellationToken, tableName: string, columnsDefinitions: string
-	): Promise<contract.SqlTemporaryTable> {
+	): Promise<SqlTemporaryTable> {
 		const tempTable = new SQLiteTempTable(this, tableName, columnsDefinitions);
 		await tempTable.init(cancellationToken);
 		return tempTable;
@@ -180,7 +234,7 @@ class SQLiteProvider extends Disposable implements contract.SqlProvider {
 	}
 }
 
-class SQLiteStatement implements contract.SqlStatement {
+class SQLiteStatement implements SqlStatement {
 	private readonly _log: Logger;
 	private readonly _sqlText: string;
 	private readonly _owner: SQLiteProvider;
@@ -192,7 +246,7 @@ class SQLiteStatement implements contract.SqlStatement {
 		this._log.trace("SQLiteStatement constructed");
 	}
 
-	public async execute(cancellationToken: CancellationToken, ...values: Array<contract.SqlStatementParam>): Promise<void> {
+	public async execute(cancellationToken: CancellationToken, ...values: Array<SqlStatementParam>): Promise<void> {
 		if (this._log.isTraceEnabled) {
 			this._log.trace("Executing Query:", this._sqlText, values);
 		}
@@ -211,8 +265,8 @@ class SQLiteStatement implements contract.SqlStatement {
 
 	public async executeSingle(
 		cancellationToken: CancellationToken,
-		...values: Array<contract.SqlStatementParam>
-	): Promise<contract.SqlResultRecord> {
+		...values: Array<SqlStatementParam>
+	): Promise<SqlResultRecord> {
 		if (this._log.isTraceEnabled) {
 			this._log.trace("Executing Single:", this._sqlText, values);
 		}
@@ -239,8 +293,8 @@ class SQLiteStatement implements contract.SqlStatement {
 
 	public async executeQuery(
 		cancellationToken: CancellationToken,
-		...values: Array<contract.SqlStatementParam>
-	): Promise<ReadonlyArray<contract.SqlResultRecord>> {
+		...values: Array<SqlStatementParam>
+	): Promise<ReadonlyArray<SqlResultRecord>> {
 		if (this._log.isTraceEnabled) {
 			this._log.trace("Executing Query:", this._sqlText, values);
 		}
@@ -270,8 +324,8 @@ class SQLiteStatement implements contract.SqlStatement {
 	// tslint:disable-next-line: max-line-length
 	public async executeQueryMultiSets(
 		cancellationToken: CancellationToken,
-		...values: Array<contract.SqlStatementParam>
-	): Promise<ReadonlyArray<ReadonlyArray<contract.SqlResultRecord>>> {
+		...values: Array<SqlStatementParam>
+	): Promise<ReadonlyArray<ReadonlyArray<SqlResultRecord>>> {
 		if (this._log.isTraceEnabled) {
 			this._log.trace("Method executeQueryMultiSets not supported. Raise an exception.");
 		}
@@ -280,8 +334,8 @@ class SQLiteStatement implements contract.SqlStatement {
 
 	public async executeScalar(
 		cancellationToken: CancellationToken,
-		...values: Array<contract.SqlStatementParam>
-	): Promise<contract.SqlData> {
+		...values: Array<SqlStatementParam>
+	): Promise<SqlData> {
 		if (this._log.isTraceEnabled) {
 			this._log.trace("Executing Scalar:", this._sqlText, values);
 		}
@@ -320,8 +374,8 @@ class SQLiteStatement implements contract.SqlStatement {
 
 	public async executeScalarOrNull(
 		cancellationToken: CancellationToken,
-		...values: Array<contract.SqlStatementParam>
-	): Promise<contract.SqlData | null> {
+		...values: Array<SqlStatementParam>
+	): Promise<SqlData | null> {
 		if (this._log.isTraceEnabled) {
 			this._log.trace("Executing ScalarOrNull:", this._sqlText, values);
 		}
@@ -362,7 +416,7 @@ namespace SQLiteSqlResultRecord {
 		[name: string]: any;
 	};
 }
-class SQLiteSqlResultRecord implements contract.SqlResultRecord {
+class SQLiteSqlResultRecord implements SqlResultRecord {
 	private readonly _financialOperation: FinancialOperation;
 	private readonly _fieldsData: any;
 	private _nameMap?: SQLiteSqlResultRecord.NameMap;
@@ -375,9 +429,9 @@ class SQLiteSqlResultRecord implements contract.SqlResultRecord {
 		this._financialOperation = financialOperation;
 	}
 
-	public get(name: string): contract.SqlData;
-	public get(index: number): contract.SqlData;
-	public get(nameOrIndex: string | number): contract.SqlData {
+	public get(name: string): SqlData;
+	public get(index: number): SqlData;
+	public get(nameOrIndex: string | number): SqlData {
 		if (typeof nameOrIndex === "string") {
 			return this.getByName(nameOrIndex);
 		} else {
@@ -399,19 +453,19 @@ class SQLiteSqlResultRecord implements contract.SqlResultRecord {
 		return this._nameMap;
 	}
 
-	private getByIndex(index: number): contract.SqlData {
+	private getByIndex(index: number): SqlData {
 		const fi = Object.keys(this._fieldsData)[index];
 		const value: any = this._fieldsData[fi];
 		return new SQLiteData(value, fi, this._financialOperation);
 	}
-	private getByName(name: string): contract.SqlData {
+	private getByName(name: string): SqlData {
 		const fi = this.nameMap[name];
 		const value: any = this._fieldsData[fi];
 		return new SQLiteData(value, fi, this._financialOperation);
 	}
 }
 
-class SQLiteTempTable extends Initable implements contract.SqlTemporaryTable {
+class SQLiteTempTable extends Initable implements SqlTemporaryTable {
 
 	private readonly _owner: SQLiteProvider;
 	private readonly _tableName: string;
@@ -424,13 +478,13 @@ class SQLiteTempTable extends Initable implements contract.SqlTemporaryTable {
 		this._columnsDefinitions = columnsDefinitions;
 	}
 
-	public bulkInsert(cancellationToken: CancellationToken, bulkValues: Array<Array<contract.SqlStatementParam>>): Promise<void> {
+	public bulkInsert(cancellationToken: CancellationToken, bulkValues: Array<Array<SqlStatementParam>>): Promise<void> {
 		return this._owner.statement(`INSERT INTO temp.${this._tableName}`).execute(cancellationToken, bulkValues as any);
 	}
 	public clear(cancellationToken: CancellationToken): Promise<void> {
 		return this._owner.statement(`DELETE FROM temp.${this._tableName}`).execute(cancellationToken);
 	}
-	public insert(cancellationToken: CancellationToken, values: Array<contract.SqlStatementParam>): Promise<void> {
+	public insert(cancellationToken: CancellationToken, values: Array<SqlStatementParam>): Promise<void> {
 		return this._owner.statement(`INSERT INTO temp.${this._tableName}`).execute(cancellationToken, ...values);
 	}
 
@@ -451,7 +505,7 @@ class SQLiteTempTable extends Initable implements contract.SqlTemporaryTable {
 	}
 }
 
-class SQLiteData implements contract.SqlData {
+class SQLiteData implements SqlData {
 	private readonly _financialOperation: FinancialOperation;
 	private readonly _sqliteValue: any;
 	private readonly _fName: string;
@@ -662,12 +716,12 @@ namespace helpers {
 				const [friendlySql, friendlyParams] = unwrapSqlAndParams(sql, params);
 				instansDb.run(friendlySql, friendlyParams, function (error) {
 					if (error) {
-						return reject(error);
+						return reject(errorWrapper(error));
 					}
 					return resolve(this);
 				});
 			} catch (e) {
-				return reject(e);
+				return reject(errorWrapper(e));
 			}
 		});
 	}
@@ -677,16 +731,16 @@ namespace helpers {
 				const [friendlySql, friendlyParams] = unwrapSqlAndParams(sql, params);
 				instansDb.all(friendlySql, friendlyParams, (error, rows) => {
 					if (error) {
-						return reject(error);
+						return reject(errorWrapper(error));
 					}
 					return resolve(rows);
 				});
 			} catch (e) {
-				return reject(e);
+				return reject(errorWrapper(e));
 			}
 		});
 	}
-	export function statementArgumentsAdapter(financialOperation: FinancialOperation, args: Array<contract.SqlStatementParam>): Array<any> {
+	export function statementArgumentsAdapter(financialOperation: FinancialOperation, args: Array<SqlStatementParam>): Array<any> {
 		return args.map(value => {
 			if (typeof value === "object") {
 				if (value !== null && financialOperation.isFinancial(value)) {
@@ -830,6 +884,23 @@ namespace helpers {
 		}
 
 		return allCommands;
+	}
+	function errorWrapper(errorLike: any): SqlError {
+		if (errorLike instanceof SqlError) { return errorLike; }
+
+		const err = wrapErrorIfNeeded(errorLike);
+
+		if (err.message.includes("SQLITE_ERROR")) {
+			if (err.message.includes("syntax error")) {
+				return new SqlSyntaxError(`Looks like wrong SQL syntax detected: ${err.message}. See innerError for details.`, err);
+			}
+		}
+
+		if (err.message.includes("SQLITE_CONSTRAINT")) {
+			return new SqlConstraintError(`SQL Constrain restriction happened: ${err.message}`, "???", err);
+		}
+
+		return new SqlError(`Unexpected error: ${err.message}`, err);
 	}
 
 	class StringReadable extends stream.Readable {
