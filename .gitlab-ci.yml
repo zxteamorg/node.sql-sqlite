@@ -1,19 +1,1 @@
 include: 'http://dev.zxteam.net/maxim.anurin/gitlab-pipelines/raw/master/node/internal-lib.yml'
-
-image: docker.registry.zxteam.net/pub/docker/build/node10.protoc-mysqlcli-psqlcli:1
-
-cache:
-  paths:
-    - node_modules/
-
-test:
-  stage: test
-  dependencies:
-    - build
-  variables:
-    GIT_STRATEGY: none
-  before_script:
-    - npm run prepare:devdb
-  script:
-    - npm run test
-    - npm run test

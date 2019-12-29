@@ -55,8 +55,7 @@
 	"scripts": {
 		"build": "zxbuild clean dist",
 		"test:local": "env TEST_DB_URL=\"sqlite://\" mocha --require source-map-support/register --recursive \"test/**/*.test.js\"",
-		"test": "mocha --require source-map-support/register --recursive \"test/**/*.test.js\"",
-		"prepare:devdb": "node scripts/init-test-db.js"
+		"test": "mocha --require source-map-support/register --recursive \"test/**/*.test.js\""
 	},
 	"private": true
 }
