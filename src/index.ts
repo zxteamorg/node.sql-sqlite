@@ -21,6 +21,8 @@ import * as readline from "readline";
 const existsAsync = promisify(fs.exists);
 const readFileAsync = promisify(fs.readFile);
 
+export { SqliteMigrationManager } from "./SqliteMigrationManager";
+
 export class SqliteProviderFactory implements EmbeddedSqlProviderFactory {
 	private readonly _financialOperation: FinancialOperation;
 	private readonly _logger: Logger;
