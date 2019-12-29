@@ -38,7 +38,8 @@ function getSQLiteUrltoDb(): URL {
 	const tmpDirectory = os.tmpdir();
 	const pathToDB = path.join(tmpDirectory, "sqliteForCreateTest.db");
 	const urlToDB = pathToFileURL(pathToDB);
-	return urlToDB;
+	const sqliteFileUrl = new URL(`file+sqlite://${urlToDB.pathname}`);
+	return sqliteFileUrl;
 }
 function getSQLiteUrltoSqlFile(): URL {
 	const pathToSqlScript = path.join(__dirname, "general.test.sql");
@@ -51,13 +52,14 @@ function getSQLiteUrltoSqlHref(): URL {
 
 describe("SQLite Create Database", function () {
 	beforeEach(async function () {
-		const pathTodb = fileURLToPath(getSQLiteUrltoDb());
+		const dbUrl: URL = getSQLiteUrltoDb();
+		const pathTodb = fileURLToPath(new URL(`file://${dbUrl.pathname}`));
 		if (fs.existsSync(pathTodb)) {
 			await fs.unlinkSync(pathTodb);
 		}
 	});
 	it("Create database", async function () {
-		const sqlProviderFactory = new lib.SqliteProviderFactory(getSQLiteUrltoDb());
+		const sqlProviderFactory = new lib.SqliteProviderFactory({ url: getSQLiteUrltoDb() });
 		await sqlProviderFactory.newDatabase(DUMMY_CANCELLATION_TOKEN);
 		const db = await sqlProviderFactory.create(DUMMY_CANCELLATION_TOKEN);
 		try {
@@ -68,7 +70,7 @@ describe("SQLite Create Database", function () {
 		}
 	});
 	it("Cannot open database because do not exist", async function () {
-		const sqlProviderFactory = new lib.SqliteProviderFactory(getSQLiteUrltoDb());
+		const sqlProviderFactory = new lib.SqliteProviderFactory({ url: getSQLiteUrltoDb() });
 		try {
 			const db = await sqlProviderFactory.create(DUMMY_CANCELLATION_TOKEN);
 		} catch (err) {
@@ -78,7 +80,7 @@ describe("SQLite Create Database", function () {
 		assert.fail("No exceptions");
 	});
 	it("Create database and run file init script", async function () {
-		const sqlProviderFactory = new lib.SqliteProviderFactory(getSQLiteUrltoDb());
+		const sqlProviderFactory = new lib.SqliteProviderFactory({ url: getSQLiteUrltoDb() });
 		await sqlProviderFactory.newDatabase(DUMMY_CANCELLATION_TOKEN, getSQLiteUrltoSqlFile());
 		const db = await sqlProviderFactory.create(DUMMY_CANCELLATION_TOKEN);
 		try {
@@ -102,7 +104,7 @@ describe("SQLite Create Database", function () {
 		const scriptContent = fs.readFileSync(pathTodb, "utf-8");
 		const httpServer = await helper.startHttpServer(scriptContent);
 		try {
-			const sqlProviderFactory = new lib.SqliteProviderFactory(getSQLiteUrltoDb());
+			const sqlProviderFactory = new lib.SqliteProviderFactory({ url: getSQLiteUrltoDb() });
 			await sqlProviderFactory.newDatabase(DUMMY_CANCELLATION_TOKEN, getSQLiteUrltoSqlHref());
 			const db = await sqlProviderFactory.create(DUMMY_CANCELLATION_TOKEN);
 			try {

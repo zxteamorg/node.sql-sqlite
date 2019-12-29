@@ -1,6 +1,6 @@
 import { CancellationToken, Financial, Logger } from "@zxteam/contract";
 import { Disposable, Initable } from "@zxteam/disposable";
-import { CancelledError, AggregateError, wrapErrorIfNeeded } from "@zxteam/errors";
+import { ArgumentError, AggregateError, CancelledError, InvalidOperationError , wrapErrorIfNeeded} from "@zxteam/errors";
 import { financial, FinancialOperation } from "@zxteam/financial";
 import { HttpClient } from "@zxteam/http-client";
 import { DUMMY_CANCELLATION_TOKEN } from "@zxteam/cancellation";
@@ -12,7 +12,7 @@ import {
 import * as sqlite from "sqlite3";
 import * as fs from "fs";
 import { promisify } from "util";
-import { URL, fileURLToPath, pathToFileURL } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 import { EOL } from "os";
 
 import * as stream from "stream";
@@ -27,11 +27,14 @@ export class SqliteProviderFactory implements EmbeddedSqlProviderFactory {
 	private readonly _url: URL;
 
 	// This implemenation wrap package https://www.npmjs.com/package/sqlite3
-	public constructor(url: URL, opts?: { logger?: Logger, financialOperation?: FinancialOperation }) {
+	public constructor(opts: SqliteProviderFactory.Opts) {
 		this._financialOperation = opts !== undefined && opts.financialOperation !== undefined ? opts.financialOperation : financial;
-		this._logger = opts !== undefined && opts.logger !== undefined ? opts.logger : new DummyLogger();
-		this._url = url;
+		this._logger = opts !== undefined && opts.log !== undefined ? opts.log : DUMMY_LOGGER;
+		if (opts.url.protocol !== "file+sqlite:") {
+			throw new ArgumentError("opts.url", "Expected URL schema 'file+sqlite:'");
+		}
 
+		this._url = new URL(`file://${opts.url.pathname}`);
 		this._logger.trace("SqliteProviderFactory Constructed");
 	}
 
@@ -185,13 +188,17 @@ export class SqliteProviderFactory implements EmbeddedSqlProviderFactory {
 			}
 		});
 	}
+}
 
+export namespace SqliteProviderFactory {
+	export interface Opts {
+		readonly url: URL;
+		readonly log?: Logger;
+		readonly financialOperation?: FinancialOperation;
+	}
 }
 
 export default SqliteProviderFactory;
-
-class ArgumentError extends Error { }
-class InvalidOperationError extends Error { }
 
 class SQLiteProvider extends Disposable implements SqlProvider {
 	public readonly dialect: SqlDialect = SqlDialect.SQLite;
@@ -644,52 +651,69 @@ class SQLiteData implements SqlData {
 			throw new InvalidOperationError(this.formatWrongDataTypeMessage());
 		}
 	}
+	public get asObject(): any {
+		if (this._sqliteValue === null) {
+			throw new InvalidOperationError(this.formatWrongDataTypeMessage());
+		} else if (typeof this._sqliteValue === "string") {
+			try {
+				return JSON.parse(this._sqliteValue);
+			} catch (e) {
+				throw new InvalidOperationError(this.formatWrongDataTypeMessage(e));
+			}
+		} else {
+			throw new InvalidOperationError(this.formatWrongDataTypeMessage());
+		}
+	}
+	public get asNullableObject(): any | null {
+		if (this._sqliteValue === null) {
+			return null;
+		} else if (typeof this._sqliteValue === "string") {
+			try {
+				return JSON.parse(this._sqliteValue);
+			} catch (e) {
+				throw new InvalidOperationError(this.formatWrongDataTypeMessage(e));
+			}
+		} else {
+			throw new InvalidOperationError(this.formatWrongDataTypeMessage());
+		}
+	}
+
 
 	public constructor(sqliteValue: any, fName: string, financialOperation: FinancialOperation) {
 		if (sqliteValue === undefined) {
-			throw new ArgumentError("sqlite Value");
+			throw new ArgumentError("sqliteValue", "Expected defined value");
 		}
 		this._sqliteValue = sqliteValue;
 		this._fName = fName;
 		this._financialOperation = financialOperation;
 	}
 
-	private formatWrongDataTypeMessage(err?: any): string {
+	private formatWrongDataTypeMessage(e?: any): string {
 		const text = `Invalid conversion: requested wrong data type of field '${this._fName}'`;
-		const message = (err) ? `Error: ${err} ` + text : text;
+		const err: Error = wrapErrorIfNeeded(e);
+		const message: string = `Error: ${err.message} ${text}`;
 		return message;
 	}
 }
 
-class DummyLogger implements Logger {
-	public getLogger(name?: string | undefined): Logger { return this; }
+const DUMMY_LOGGER: Logger = Object.freeze({
+	get isTraceEnabled(): boolean { return false; },
+	get isDebugEnabled(): boolean { return false; },
+	get isInfoEnabled(): boolean { return false; },
+	get isWarnEnabled(): boolean { return false; },
+	get isErrorEnabled(): boolean { return false; },
+	get isFatalEnabled(): boolean { return false; },
 
-	public get isTraceEnabled(): boolean { return false; }
-	public get isDebugEnabled(): boolean { return false; }
-	public get isInfoEnabled(): boolean { return false; }
-	public get isWarnEnabled(): boolean { return false; }
-	public get isErrorEnabled(): boolean { return false; }
-	public get isFatalEnabled(): boolean { return false; }
+	trace(message: string, ...args: any[]): void { /* NOP */ },
+	debug(message: string, ...args: any[]): void { /* NOP */ },
+	info(message: string, ...args: any[]): void { /* NOP */ },
+	warn(message: string, ...args: any[]): void { /* NOP */ },
+	error(message: string, ...args: any[]): void { /* NOP */ },
+	fatal(message: string, ...args: any[]): void { /* NOP */ },
 
-	public trace(message: string, ...args: any[]): void {
-		// dummy
-	}
-	public debug(message: string, ...args: any[]): void {
-		// dummy
-	}
-	public info(message: string, ...args: any[]): void {
-		// dummy
-	}
-	public warn(message: string, ...args: any[]): void {
-		// dummy
-	}
-	public error(message: string, ...args: any[]): void {
-		// dummy
-	}
-	public fatal(message: string, ...args: any[]): void {
-		// dummy
-	}
-}
+	getLogger(name?: string): Logger { /* NOP */ return this; }
+});
+
 
 namespace helpers {
 	export function openDatabase(filename: URL): Promise<sqlite.Database> {
@@ -808,7 +832,6 @@ namespace helpers {
 		throw new Error(`Cannot unwrap query: ${sql}`);
 
 	}
-
 	async function loadScriptAndParseScript(cancellationToken: CancellationToken, urlPath: URL): Promise<Array<string>> {
 		const sqlScriptContent = await loadScript(cancellationToken, urlPath);
 		const sqlCommands = await splitScriptToStatements(cancellationToken, sqlScriptContent);

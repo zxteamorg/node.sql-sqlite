@@ -2,7 +2,8 @@ import * as chai from "chai";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { URL, fileURLToPath, pathToFileURL } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
+import { PendingSuiteFunction, Suite, SuiteFunction } from "mocha";
 
 import { CancellationToken } from "@zxteam/contract";
 import { financial } from "@zxteam/financial";
@@ -47,20 +48,52 @@ const DUMMY_CANCELLATION_TOKEN: CancellationToken = {
 	throwIfCancellationRequested(): void { /* STUB */ }
 };
 
-function getSQLiteUrltoDb(): URL {
-	const tmpDirectory = os.tmpdir();
-	const pathToDB = path.join(tmpDirectory, "sqlite.db");
-	const urlToDB = pathToFileURL(pathToDB);
-	return urlToDB;
-}
-function getSQLiteUrltoSqlFile(): URL {
-	const pathToSqlScript = path.join(__dirname, "general.test.sql");
-	const urlToDB = pathToFileURL(pathToSqlScript);
-	return urlToDB;
-}
+
+const { myDescribe, TEST_DB_URL } = (function (): {
+	myDescribe: PendingSuiteFunction | SuiteFunction;
+	TEST_DB_URL: string | null
+} {
+	let { TEST_DB_URL: testDbUrl } = process.env;
+
+	if (!testDbUrl || testDbUrl === "file+sqlite://") {
+		const tmpDirectory = os.tmpdir();
+		const pathToDB = path.join(tmpDirectory, "sqlite.db");
+		const urlToDB = pathToFileURL(pathToDB);
+		const sqliteFileUrl = new URL(`file+sqlite://${urlToDB.pathname}`);
+		return { myDescribe: describe, TEST_DB_URL: sqliteFileUrl.toString() };
+	}
+
+	let url: URL;
+	try { url = new URL(testDbUrl); } catch (e) {
+		console.warn(`The tests ${__filename} are skipped due TEST_DB_URL has wrong value. Expected URL like postgres://testuser:testpwd@127.0.0.1:5432/db`);
+		return { myDescribe: describe.skip, TEST_DB_URL: testDbUrl };
+	}
+
+	switch (url.protocol) {
+		case "file+sqlite://": {
+			return { myDescribe: describe, TEST_DB_URL: testDbUrl };
+		}
+		default: {
+			console.warn(`The tests ${__filename} are skipped due TEST_DB_URL has wrong value. Unsupported protocol: ${url.protocol}`);
+			return { myDescribe: describe.skip, TEST_DB_URL: testDbUrl };
+		}
+	}
+})();
+
+// function getSQLiteUrltoDb(): URL {
+// 	const tmpDirectory = os.tmpdir();
+// 	const pathToDB = path.join(tmpDirectory, "sqlite.db");
+// 	const urlToDB = pathToFileURL(pathToDB);
+// 	return urlToDB;
+// }
+// function getSQLiteUrltoSqlFile(): URL {
+// 	const pathToSqlScript = path.join(__dirname, "general.test.sql");
+// 	const urlToDB = pathToFileURL(pathToSqlScript);
+// 	return urlToDB;
+// }
 
 
-describe("SQLite Tests", function () {
+myDescribe("SQLite Tests", function () {
 	let sqlProviderFactory: lib.SqliteProviderFactory;
 	let sqlProvider: SqlProvider | null;
 
@@ -84,13 +117,18 @@ describe("SQLite Tests", function () {
 		});
 		*/
 
-		const pathTodb = fileURLToPath(getSQLiteUrltoDb());
+		const dbUrl: URL = new URL(TEST_DB_URL!);
+
+		const pathToSqlScript: string = path.join(__dirname, "general.test.sql");
+		const urlToSqlFile: URL = pathToFileURL(pathToSqlScript);
+
+		const pathTodb = fileURLToPath(new URL(`file://${dbUrl.pathname}`));
 		if (fs.existsSync(pathTodb)) {
 			fs.unlinkSync(pathTodb);
 		}
 
-		sqlProviderFactory = new lib.SqliteProviderFactory(getSQLiteUrltoDb());
-		await sqlProviderFactory.newDatabase(DUMMY_CANCELLATION_TOKEN, getSQLiteUrltoSqlFile());
+		sqlProviderFactory = new lib.SqliteProviderFactory({ url: dbUrl });
+		await sqlProviderFactory.newDatabase(DUMMY_CANCELLATION_TOKEN, urlToSqlFile);
 	});
 
 	beforeEach(async function () {

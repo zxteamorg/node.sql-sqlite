@@ -15,12 +15,13 @@
 			"stopOnEntry": false,
 			"program": "${workspaceRoot}/node_modules/mocha/bin/_mocha",
 			"args": [
-				"--no-timeouts",
+				"--no-timeout",
 				"--colors",
 				"--debug-brk",
 				"test/**/*.js"
 			],
 			"env": {
+				"LOG_LEVEL": "warn",
 				"NODE_ENV": "development"
 			},
 			"sourceMaps": true
