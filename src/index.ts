@@ -1,6 +1,6 @@
 import { CancellationToken, Financial, Logger } from "@zxteam/contract";
 import { Disposable, Initable } from "@zxteam/disposable";
-import { ArgumentError, AggregateError, CancelledError, InvalidOperationError , wrapErrorIfNeeded} from "@zxteam/errors";
+import { ArgumentError, AggregateError, InvalidOperationError, wrapErrorIfNeeded } from "@zxteam/errors";
 import { financial, FinancialOperation } from "@zxteam/financial";
 import { HttpClient } from "@zxteam/http-client";
 import { DUMMY_CANCELLATION_TOKEN } from "@zxteam/cancellation";
@@ -12,16 +12,15 @@ import {
 import * as sqlite from "sqlite3";
 import * as fs from "fs";
 import { promisify } from "util";
-import { fileURLToPath, pathToFileURL } from "url";
-import { EOL } from "os";
+import { fileURLToPath } from "url";
 
-import * as stream from "stream";
-import * as readline from "readline";
+import { splitScriptToStatements } from "./splitScriptToStatements";
 
 const existsAsync = promisify(fs.exists);
 const readFileAsync = promisify(fs.readFile);
 
 export { SqliteMigrationManager } from "./SqliteMigrationManager";
+export { splitScriptToStatements } from "./splitScriptToStatements";
 
 export class SqliteProviderFactory implements EmbeddedSqlProviderFactory {
 	private readonly _financialOperation: FinancialOperation;
@@ -781,7 +780,7 @@ namespace helpers {
 	) {
 		if (initScriptUrl !== undefined) {
 			logger.trace("Loading script...");
-			const sqlCommands = await loadScriptAndParseScript(cancellationToken, initScriptUrl);
+			const sqlCommands = await loadScriptStatements(cancellationToken, initScriptUrl);
 
 			if (sqlCommands.length === 0) {
 				logger.trace("File init script do not have sql commands");
@@ -834,7 +833,7 @@ namespace helpers {
 		throw new Error(`Cannot unwrap query: ${sql}`);
 
 	}
-	async function loadScriptAndParseScript(cancellationToken: CancellationToken, urlPath: URL): Promise<Array<string>> {
+	async function loadScriptStatements(cancellationToken: CancellationToken, urlPath: URL): Promise<Array<string>> {
 		const sqlScriptContent = await loadScript(cancellationToken, urlPath);
 		const sqlCommands = await splitScriptToStatements(cancellationToken, sqlScriptContent);
 		return sqlCommands;
@@ -861,55 +860,6 @@ namespace helpers {
 
 		return invokeResponse.body.toString("utf8");
 	}
-	async function splitScriptToStatements(cancellationToken: CancellationToken, sqlScriptContent: string): Promise<Array<string>> {
-		const allCommands: Array<string> = [];
-		const sqlScriptContentStream = new StringReadable(sqlScriptContent);
-		const readlineInterface = readline.createInterface({
-			input: sqlScriptContentStream,
-			crlfDelay: Infinity
-		});
-
-		let statement = "";
-		readlineInterface.on("line", function (line: string) {
-			if (line.startsWith("--")) {
-				if (line.startsWith("-- GO")) {
-					const trimmedStatement = statement.trim();
-					if (trimmedStatement.length > 0) {
-						allCommands.push(statement);
-					}
-					statement = "";
-				}
-			} else {
-				if (statement.length > 0) {
-					statement = `${statement}${EOL}${line}`;
-				} else {
-					statement = `${statement}${line}`;
-				}
-			}
-		});
-
-		await new Promise(function (resolve, reject) {
-			function complete() {
-				resolve();
-				cancellationToken.removeCancelListener(cancel);
-				readlineInterface.removeListener("close", complete);
-			}
-			function cancel() {
-				reject(new CancelledError());
-				cancellationToken.removeCancelListener(cancel);
-				readlineInterface.removeListener("close", complete);
-			}
-
-			readlineInterface.on("close", complete);
-			cancellationToken.addCancelListener(cancel);
-		});
-
-		if (statement.length > 0) {
-			allCommands.push(statement);
-		}
-
-		return allCommands;
-	}
 	function errorWrapper(errorLike: any): SqlError {
 		if (errorLike instanceof SqlError) { return errorLike; }
 
@@ -926,27 +876,5 @@ namespace helpers {
 		}
 
 		return new SqlError(`Unexpected error: ${err.message}`, err);
-	}
-
-	class StringReadable extends stream.Readable {
-		private _data: Buffer | null;
-
-		public constructor(str: string) {
-			super();
-			this._data = Buffer.from(str);
-		}
-
-		public _read(size: number): void {
-			if (this._data !== null) {
-				const chunk: Buffer = this._data.slice(0, size);
-				this._data = this._data.slice(chunk.length);
-				this.push(chunk);
-				if (this._data.length === 0) {
-					this._data = null;
-				}
-			} else {
-				this.push(null);
-			}
-		}
 	}
 }

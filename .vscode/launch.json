@@ -21,7 +21,7 @@
 				"test/**/*.js"
 			],
 			"env": {
-				"LOG_LEVEL": "warn",
+				"LOG_LEVEL": "trace",
 				"NODE_ENV": "development"
 			},
 			"sourceMaps": true

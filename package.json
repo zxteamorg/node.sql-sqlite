@@ -1,6 +1,6 @@
 {
 	"name": "@zxteam/sql-sqlite",
-	"version": "6.0.46",
+	"version": "6.0.50",
 	"description": "ZXTeam's SQL implementation for SQLite",
 	"main": "./src/index.js",
 	"types": "./src/index.d.ts",
@@ -36,7 +36,7 @@
 		"@zxteam/errors": "^6.0.41",
 		"@zxteam/financial": "^6.0.36",
 		"@zxteam/http-client": "^6.0.40",
-		"@zxteam/sql": "^6.0.45",
+		"@zxteam/sql": "^6.0.50",
 		"sqlite3": "^4.1.1"
 	},
 	"keywords": [
