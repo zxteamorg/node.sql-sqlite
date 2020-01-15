@@ -611,9 +611,24 @@ class SQLiteData implements SqlData {
 		}
 	}
 	public get asDate(): Date {
-		if (typeof this._sqliteValue === "number" || typeof this._sqliteValue === "string") {
+		if (typeof this._sqliteValue === "string") {
 			try {
 				return new Date(this._sqliteValue);
+			} catch (e) {
+				throw new InvalidOperationError(this.formatWrongDataTypeMessage(e));
+			}
+		} else if (typeof this._sqliteValue === "number") {
+			try {
+				if (this._fName.includes("date_unix")) {
+					return new Date(this._sqliteValue * 1000);
+				} else if (this._fName.includes("date_timestamp")) {
+					return new Date(this._sqliteValue);
+				} else {
+					throw new InvalidOperationError(
+						`Invalid conversion: requested wrong data type of field '${this._fName}'. ` +
+						"To use asDate on a number field, the field name should includes 'date_unix' or 'date_timestamp'"
+					);
+				}
 			} catch (e) {
 				throw new InvalidOperationError(this.formatWrongDataTypeMessage(e));
 			}
