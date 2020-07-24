@@ -27,10 +27,8 @@ export class SqliteMigrationManager extends MigrationManager {
 	}
 
 	protected async _createVersionTable(cancellationToken: CancellationToken, sqlProvider: SqlProvider): Promise<void> {
-		const tableCountData = await sqlProvider.statement(
-			"SELECT COUNT(*) FROM [sqlite_master] WHERE [type] = 'table'"
-		).executeScalar(cancellationToken);
-		if (tableCountData.asInteger !== 0) {
+		const isVersionTableExist: boolean = await this._isVersionTableExist(cancellationToken, sqlProvider);
+		if (isVersionTableExist) {
 			throw new SqliteMigrationManager.MigrationError("Your database has tables. Create Version Table allowed only for an empty database. Please create Version Table yourself.");
 		}
 
@@ -60,6 +58,18 @@ export class SqliteMigrationManager extends MigrationManager {
 		).execute(cancellationToken, version, Math.trunc(Date.now() / 1000), logText);
 	}
 
+	protected async _isVersionLogExist(cancellationToken: CancellationToken, sqlProvider: SqlProvider, version: string): Promise<boolean> {
+		const isExistSqlData = await sqlProvider.statement(
+			`SELECT 1 FROM [${this.versionTableName}] ` +
+			"WHERE [version] = ?"
+		).executeScalarOrNull(cancellationToken, version);
+
+		if (isExistSqlData === null) { return false; }
+		if (isExistSqlData.asInteger !== 1) { throw new SqliteMigrationManager.MigrationError("Unexpected SQL result"); }
+
+		return true;
+	}
+
 	protected async _isVersionTableExist(cancellationToken: CancellationToken, sqlProvider: SqlProvider): Promise<boolean> {
 		const isExistSqlData = await sqlProvider.statement(
 			"SELECT 1 FROM [sqlite_master] WHERE [type] = 'table' AND [name] = ?"
@@ -69,6 +79,13 @@ export class SqliteMigrationManager extends MigrationManager {
 		if (isExistSqlData.asInteger !== 1) { throw new SqliteMigrationManager.MigrationError("Unexpected SQL result"); }
 
 		return true;
+	}
+
+	protected async _removeVersionLog(cancellationToken: CancellationToken, sqlProvider: SqlProvider, version: string): Promise<void> {
+		await sqlProvider.statement(
+			`DELETE FROM [${this.versionTableName}] ` +
+			"WHERE [version] = ?"
+		).execute(cancellationToken, version);
 	}
 
 	protected async _verifyVersionTableStructure(cancellationToken: CancellationToken, sqlProvider: SqlProvider): Promise<void> {

@@ -142,7 +142,7 @@ export class SqliteProviderFactory implements EmbeddedSqlProviderFactory {
 
 	public usingProvider<T>(
 		cancellationToken: CancellationToken,
-		worker: (sqlProvder: SqlProvider) => T | Promise<T>
+		worker: (sqlProvder: SqlProvider) => Promise<T>
 	): Promise<T> {
 		const executionPromise: Promise<T> = (async () => {
 			const sqlProvider: SqlProvider = await this.create(cancellationToken);
@@ -163,20 +163,16 @@ export class SqliteProviderFactory implements EmbeddedSqlProviderFactory {
 	}
 
 	public usingProviderWithTransaction<T>(
-		cancellationToken: CancellationToken, worker: (sqlProvder: SqlProvider) => T | Promise<T>
+		cancellationToken: CancellationToken, worker: (sqlProvder: SqlProvider) => Promise<T>
 	): Promise<T> {
 		return this.usingProvider(cancellationToken, async (sqlProvider: SqlProvider) => {
 			await sqlProvider.statement("BEGIN TRANSACTION").execute(cancellationToken);
 			try {
-				let result: T;
-				const workerResult = worker(sqlProvider);
-				if (workerResult instanceof Promise) {
-					result = await workerResult;
-				} else {
-					result = workerResult;
-				}
+				const result: T = await worker(sqlProvider);
+
 				// We have not to cancel this operation, so pass DUMMY_CANCELLATION_TOKEN
 				await sqlProvider.statement("COMMIT TRANSACTION").execute(DUMMY_CANCELLATION_TOKEN);
+
 				return result;
 			} catch (e) {
 				try {
@@ -299,6 +295,38 @@ class SQLiteStatement implements SqlStatement {
 		return new SQLiteSqlResultRecord(underlyingResult[0], this._owner.financialOperation);
 	}
 
+	public async executeSingleOrNull(
+		cancellationToken: CancellationToken,
+		...values: Array<SqlStatementParam>
+	): Promise<SqlResultRecord | null> {
+		if (this._log.isTraceEnabled) {
+			this._log.trace("Executing Single:", this._sqlText, values);
+		}
+		const underlyingResult = await helpers.sqlFetch(
+			this._owner.sqliteConnection,
+			this._sqlText,
+			helpers.statementArgumentsAdapter(this._owner.financialOperation, values)
+		);
+
+		this._log.trace("Check cancellationToken for interrupt");
+		cancellationToken.throwIfCancellationRequested();
+
+		if (this._log.isTraceEnabled) {
+			this._log.trace("Executed Scalar:", underlyingResult);
+		}
+
+		if (underlyingResult.length === 0) {
+			return null;
+		}
+
+		this._log.trace("Result processing");
+		if (underlyingResult.length !== 1) {
+			throw new InvalidOperationError("SQL query returns non-single result");
+		}
+		this._log.trace("Result create new SQLiteSqlResultRecord()");
+		return new SQLiteSqlResultRecord(underlyingResult[0], this._owner.financialOperation);
+	}
+
 	public async executeQuery(
 		cancellationToken: CancellationToken,
 		...values: Array<SqlStatementParam>
@@ -364,14 +392,14 @@ class SQLiteStatement implements SqlStatement {
 		this._log.trace("Result processing");
 		if (underlyingResult.length > 0) {
 			const underlyingResultFirstRow = underlyingResult[0];
-			const results = underlyingResultFirstRow[Object.keys(underlyingResultFirstRow)[0]];
-			const fields = Object.keys(underlyingResultFirstRow)[0];
+			const resultValue = underlyingResultFirstRow[Object.keys(underlyingResultFirstRow)[0]];
+			const fieldName = Object.keys(underlyingResultFirstRow)[0];
 
 			if (this._log.isTraceEnabled) {
-				this._log.trace("Create SQLiteData and return result", results, fields);
+				this._log.trace("Create SQLiteData and return result", resultValue, fieldName);
 			}
 
-			return new SQLiteData(results, fields, this._owner.financialOperation);
+			return new SQLiteData(resultValue, fieldName, this._owner.financialOperation);
 		} else {
 			if (this._log.isTraceEnabled) {
 				this._log.trace("Returns not enough data to complete request. Raise an exception.", underlyingResult);

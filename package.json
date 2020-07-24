@@ -1,6 +1,6 @@
 {
 	"name": "@zxteam/sql-sqlite",
-	"version": "6.0.51",
+	"version": "6.0.66",
 	"description": "ZXTeam's SQL implementation for SQLite",
 	"main": "./src/index.js",
 	"types": "./src/index.d.ts",
@@ -24,20 +24,20 @@
 	"devDependencies": {
 		"@types/chai-datetime": "^0.0.33",
 		"@types/sqlite3": "^3.1.6",
-		"@zxnode/build": "^0.0.34",
-		"@zxteam/logger": "^6.0.40",
-		"chai-datetime": "^1.5.0"
+		"@zxnode/build": "^0.0.38",
+		"@zxteam/logger": "^6.0.63",
+		"chai-datetime": "^1.7.0"
 	},
 	"dependencies": {
-		"@zxteam/cancellation": "^6.0.40",
-		"@zxteam/contract": "^6.0.40",
-		"@zxteam/disposable": "^6.0.40",
-		"@zxteam/ensure": "^6.0.40",
-		"@zxteam/errors": "^6.0.41",
-		"@zxteam/financial": "^6.0.36",
-		"@zxteam/http-client": "^6.0.40",
-		"@zxteam/sql": "^6.0.50",
-		"sqlite3": "^4.1.1"
+		"@zxteam/cancellation": "^6.0.62",
+		"@zxteam/contract": "^6.0.62",
+		"@zxteam/disposable": "^6.0.63",
+		"@zxteam/ensure": "^6.0.63",
+		"@zxteam/errors": "^6.0.62",
+		"@zxteam/financial": "^6.0.62",
+		"@zxteam/http-client": "^6.0.63",
+		"@zxteam/sql": "^6.0.66",
+		"sqlite3": "^4.2.0"
 	},
 	"keywords": [
 		"zxteam",
