@@ -1,6 +1,6 @@
 {
 	"name": "@zxteam/sql-sqlite",
-	"version": "6.0.66",
+	"version": "6.0.67",
 	"description": "ZXTeam's SQL implementation for SQLite",
 	"main": "./src/index.js",
 	"types": "./src/index.d.ts",
@@ -35,7 +35,7 @@
 		"@zxteam/ensure": "^6.0.63",
 		"@zxteam/errors": "^6.0.62",
 		"@zxteam/financial": "^6.0.62",
-		"@zxteam/http-client": "^6.0.63",
+		"@zxteam/http-client": "^6.0.66",
 		"@zxteam/sql": "^6.0.66",
 		"sqlite3": "^4.2.0"
 	},
@@ -46,12 +46,12 @@
 	],
 	"repository": {
 		"type": "git",
-		"url": "ssh://git@code.zxteam.net:22282/pub/node/sql-sqlite.git"
+		"url": "https://github.com/zxteamorg/node.sql-sqlite.git"
 	},
 	"bugs": {
-		"url": "https://dev.zxteam.net/pub/node/sql-sqlite/issues"
+		"url": "https://github.com/zxteamorg/node.sql-sqlite/issues"
 	},
-	"homepage": "https://dev.zxteam.net/pub/node/sql-sqlite#readme",
+	"homepage": "https://github.com/zxteamorg/node-sqlite.sql",
 	"scripts": {
 		"build": "zxbuild clean dist",
 		"test:local": "env TEST_DB_URL=\"sqlite://\" mocha --require source-map-support/register --recursive \"test/**/*.test.js\"",
